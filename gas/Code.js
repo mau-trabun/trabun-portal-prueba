@@ -603,7 +603,8 @@ function datosSeguimiento_() {
   };
 }
 
-// Pure: loaded data (cargarDatos_) + datosSeguimiento_() → { Resumen: rows, 'Por curso': rows }; rows 0–1 = status lines, row 2 = header.
+// Pure: loaded data (cargarDatos_) + datosSeguimiento_() → { tabs: { Resumen: rows, 'Por curso': rows }, notas: { tab: [[row, col, text]] } };
+// rows 0–1 = status lines, row 2 = header; notas (0-based cells) explain unexpected cases with the portal's wording.
 // null when responses could not be read (the caller keeps the previous tracker instead of writing zeros).
 function seguimiento_(d, s, reloj) {
   if (!d.test) return null;
@@ -625,6 +626,12 @@ function seguimiento_(d, s, reloj) {
   };
   const corto = n => n.split(' ')[0]; // "7° básico" → "7°", "I° medio" → "I°"
   const pct = (r, est) => (est ? Math.round(r / est * 1000) / 1000 : '');
+  const miles = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const resp = n => miles(n) + (n === 1 ? ' respuesta' : ' respuestas');
+  // Why a grade is outside the registered ones (same three cases the portal folds into "Fuera de lo registrado")
+  const porQue = (p, t, nivel) => (t.nivelesPapel.indexOf(nivel) >= 0 ? 'este nivel hace el test en papel (Agencia Focus)'
+    : p.nivelesImplementados.indexOf(nivel) >= 0 ? 'este nivel no tiene Test en línea para el colegio'
+      : 'SF no tiene este nivel en el programa');
 
   const filas = [];
   Object.keys(d.sf).forEach(rbd => {
@@ -649,8 +656,23 @@ function seguimiento_(d, s, reloj) {
   // Two numeric columns per grade (responses, estimate) so the team can add them up
   const resumen = estado.concat([SEG_RESUMEN.concat([].concat.apply([], columnas.map(i => [NIVELES[i] + ' resp.', NIVELES[i] + ' est.'])))]);
   const cursos = estado.concat([SEG_CURSOS.slice()]);
+  const notasR = [], notasC = [];
+  const base = SEG_RESUMEN.length, cPct = SEG_RESUMEN.indexOf('%');
+  const cC = { curso: SEG_CURSOS.indexOf('Curso'), r: SEG_CURSOS.indexOf('Respuestas'), est: SEG_CURSOS.indexOf('Estimado'), reg: SEG_CURSOS.indexOf('Registrado') };
   filas.forEach(f => {
     const { t, p } = f;
+    const fila = resumen.length;
+    columnas.forEach((i, k) => {
+      const nivel = NIVELES[i], n = t.niveles.find(x => x.nivel === nivel);
+      const cR = base + 2 * k, cE = cR + 1;
+      if (!n) { if (t.nivelesPapel.indexOf(nivel) >= 0) notasR.push([fila, cR, 'Test en papel · a cargo de la Agencia Focus.']); return; }
+      if (!n.registrado) notasR.push([fila, cE, `Fuera de lo registrado: ${porQue(p, t, nivel)}, pero hay ${resp(n.r)}. Cuentan en Respuestas, no en el %.`]);
+      else if (!n.est) notasR.push([fila, cE, 'Sin estimado: SF no tiene Alumnos para este nivel. No cuenta en el %.']);
+      else if (n.r > n.est) notasR.push([fila, cR, `${miles(n.r - n.est)} sobre lo estimado (estimado: ${miles(n.est)}).`]);
+    });
+    if (t.resumen.est && t.resumen.rConEst < t.resumen.r) {
+      notasR.push([fila, cPct, `El % considera solo los niveles con estimado: ${miles(t.resumen.rConEst)} de ${resp(t.resumen.r)}.`]);
+    }
     const pendientes = [];
     t.niveles.filter(n => n.registrado).forEach(n => {
       const reg = n.cursos.filter(c => c.registrado);
@@ -668,15 +690,31 @@ function seguimiento_(d, s, reloj) {
       f.u.acciones[p.programa].join(', '), t.resumen.r, t.resumen.est || '', pct(t.resumen.rConEst, t.resumen.est),
       pendientes.join(', ')].concat([].concat.apply([], columnas.map(celdas))));
     t.niveles.forEach(n => n.cursos.forEach(c => {
+      const fc = cursos.length;
+      if (!c.letra) {
+        notasC.push([fc, cC.curso, 'Respuestas sin letra de curso.'], [fc, cC.reg, 'Respuestas sin letra de curso: no se pueden asignar a un curso.']);
+      } else if (!n.registrado) {
+        notasC.push([fc, cC.reg, `Curso no registrado: ${porQue(p, t, n.nivel)}.`]);
+      } else if (!c.registrado) {
+        const reg = n.cursos.filter(x => x.registrado).map(x => x.letra);
+        notasC.push([fc, cC.reg, reg.length ? `Curso no registrado: SF tiene ${reg.length} ${reg.length === 1 ? 'curso' : 'cursos'} en ${n.nivel} (${reg.join(', ')}).`
+          : `Curso no registrado: SF no tiene cursos (CxN) para ${n.nivel}.`]);
+      } else if (!c.est) {
+        notasC.push([fc, cC.est, 'Sin estimado: falta Alumnos o CxN en SF.']);
+      } else if (c.r > c.est) {
+        notasC.push([fc, cC.r, `${miles(c.r - c.est)} sobre lo estimado.`]);
+      }
       cursos.push([Number(f.rbd), f.col.nombre || '', prog(p), p.modelo || '', p.jefeProyecto || '', p.coordinador || '', n.nivel,
         c.letra ? corto(n.nivel) + ' ' + c.letra : 'Sin letra', c.r, c.est || '', pct(c.r, c.est),
         n.registrado && c.registrado ? 'Sí' : 'Fuera de lo registrado']);
     }));
   });
-  const out = {};
-  out[SEG_TABS.resumen] = resumen;
-  out[SEG_TABS.cursos] = cursos;
-  return out;
+  const tabs = {}, notas = {};
+  tabs[SEG_TABS.resumen] = resumen;
+  tabs[SEG_TABS.cursos] = cursos;
+  notas[SEG_TABS.resumen] = notasR;
+  notas[SEG_TABS.cursos] = notasC;
+  return { tabs, notas };
 }
 
 // ── Normalization ───────────────────────────────────────────

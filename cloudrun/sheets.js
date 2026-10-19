@@ -95,8 +95,10 @@ function crearSeguimiento(id) {
     { repeatCell: { range: { sheetId, startRowIndex: ENC, endRowIndex: ENC + 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } }]
     .concat(encabezado.map((t, j) => ({ repeatCell: { range: { sheetId, startRowIndex: ENC + 1, startColumnIndex: j, endColumnIndex: j + 1 },
       cell: { userEnteredFormat: t === '%' ? { numberFormat: { type: 'PERCENT', pattern: '0%' } } : {} }, fields: 'userEnteredFormat.numberFormat' } })));
+  const notasEscritas = {}; // tab → notes last written (with its sheetId), so unchanged notes are not rewritten every 2 min
   return {
-    async escribir(tabs) {
+    // notas: {tab: [[row, col, text]]} (0-based). Each tab's data-area notes are replaced as a whole when they change.
+    async escribir(tabs, notas = {}) {
       const meta = await api(base + '?fields=sheets.properties(title,sheetId,gridProperties)');
       const hojas = {};
       meta.sheets.forEach(s => { hojas[s.properties.title] = s.properties; });
@@ -118,7 +120,7 @@ function crearSeguimiento(id) {
           usados.add(sheetId);
           pedidos.push({ addSheet: { properties: { sheetId, title: n, gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } } } });
           pedidos.push(...formatos(sheetId, filas[ENC] || []));
-          hojas[n] = { gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } };
+          hojas[n] = { sheetId, gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } };
         } else {
           const g = h.gridProperties || {};
           if ((g.rowCount || 0) < alto) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'ROWS', length: alto - (g.rowCount || 0) + 100 } });
@@ -137,6 +139,20 @@ function crearSeguimiento(id) {
         if (colsHoja > ancho) limpiar.push(rango(n) + '!' + letra(ancho + 1) + '1:' + letra(colsHoja) + alto);
       });
       if (limpiar.length) await post('/values:batchClear', { ranges: limpiar });
+      // Notes after the values, so they never sit on rows of the previous version for long
+      const pedNotas = [], nuevas = {};
+      nombres.filter(n => notas[n]).forEach(n => {
+        const { sheetId } = hojas[n];
+        const clave = sheetId + '|' + JSON.stringify(notas[n]);
+        if (notasEscritas[n] === clave) return;
+        nuevas[n] = clave;
+        pedNotas.push({ repeatCell: { range: { sheetId, startRowIndex: ENC + 1 }, cell: {}, fields: 'note' } }); // clears the old ones
+        notas[n].forEach(([fila, col, texto]) => pedNotas.push({ updateCells: { start: { sheetId, rowIndex: fila, columnIndex: col }, rows: [{ values: [{ note: texto }] }], fields: 'note' } }));
+      });
+      if (pedNotas.length) {
+        await post(':batchUpdate', { requests: pedNotas });
+        Object.assign(notasEscritas, nuevas);
+      }
     },
   };
 }

@@ -96,6 +96,25 @@ global.fetch = async (url, op = {}) => {
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
   check('same header again: no formatting request', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));
 
+  // Notes: data-area notes cleared and set after the values; unchanged notes not resent; changed ones replaced
+  llamadas = [];
+  const notas1 = { Resumen: [[3, 2, 'El % considera solo…']], 'Por curso': [[4, 1, 'Sin estimado…'], [5, 0, 'Curso no registrado…']] };
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, notas1);
+  const conNotas = llamadas.filter(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')).pop();
+  const req = conNotas ? conNotas.cuerpo.requests : [];
+  const borra = req.filter(q => q.repeatCell && q.repeatCell.fields === 'note');
+  const pone = req.filter(q => q.updateCells);
+  check('notes: one clear per tab from row 4 down, then each note at its cell, after the values', borra.length === 2 && borra.every(q => q.repeatCell.range.startRowIndex === 3 && JSON.stringify(q.repeatCell.cell) === '{}')
+    && pone.length === 3 && pone[0].updateCells.start.rowIndex === 3 && pone[0].updateCells.start.columnIndex === 2 && pone[0].updateCells.rows[0].values[0].note === 'El % considera solo…'
+    && llamadas.findIndex(l => l.ruta.endsWith('values:batchUpdate')) < llamadas.indexOf(conNotas));
+  llamadas = [];
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, notas1);
+  check('notes unchanged: not resent', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));
+  llamadas = [];
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, { Resumen: [], 'Por curso': notas1['Por curso'] });
+  const solo = llamadas.filter(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')).pop();
+  check('notes changed in one tab: only that tab cleared (and left empty)', solo && solo.cuerpo.requests.length === 1 && solo.cuerpo.requests[0].repeatCell.range.sheetId === hojas.Resumen.props.sheetId);
+
   // Grid too small for a bigger write → rows appended first
   llamadas = [];
   hojas.Resumen.props.gridProperties = { rowCount: 10, columnCount: 3 };
