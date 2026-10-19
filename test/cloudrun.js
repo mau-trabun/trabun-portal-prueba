@@ -137,10 +137,10 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
     && snapCorreos[0].join() === 'RBD,Enviado' && !JSON.stringify(snapCorreos).includes('ejemplo.invalid'));
   ctx.Utilities.formatDate = formatDate; // the Apps Script harness with the same date formatter as Cloud Run
   const esperado = ctx.seguimiento_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), ctx.reloj_());
-  const sinEstado = t => Object.keys(t).map(k => t[k].slice(1));
+  const sinEstado = t => Object.keys(t).map(k => t[k].slice(1)); // row 1 carries the time
   check('tracker written after a snapshot, rows identical to Code.js on Apps Script (2 tabs)', escritos.length === 1
     && Object.keys(escritos[0]).join() === 'Resumen,Por curso' && JSON.stringify(sinEstado(escritos[0])) === JSON.stringify(sinEstado(esperado)));
-  check('tracker carries the email date (read from its Date cell)', escritos[0].Resumen.find(r => r[0] === 11111)[escritos[0].Resumen[1].indexOf('Correo enviado')] === '09-10-2026');
+  check('tracker carries the email date (read from its Date cell)', escritos[0].Resumen.find(r => r[0] === 11111)[escritos[0].Resumen[2].indexOf('Correo enviado')] === '09-10-2026');
   await post(casos[0]);
   await new Promise(r => setTimeout(r, 10));
   check('a login does not write the tracker (only snapshots do)', escritos.length === 1);
@@ -174,7 +174,8 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   const vuelta = escritos.length - e0 - enHorario - tarde - sigHora - manana;
   check('tracker schedule: every snapshot 8–18 h, then once per clock hour (18:00, 19:00, 7:00…)', enHorario === 2 && tarde === 1 && sigHora === 1 && manana === 1);
   check('tracker schedule: back to every snapshot at 8:00', vuelta === 2);
-  check('status line states the schedule', /cada 2 minutos de 8:00 a 18:00, y una vez por hora/.test(escritos[escritos.length - 1].Resumen[0][0]));
+  check('status lines: update time in A1, schedule in A2', /^Actualizado: \\d{2}-\\d{2}-\\d{4} \\d{2}:\\d{2}$/.test(escritos[escritos.length - 1].Resumen[0][0])
+    && /^Actualización automática cada 2 minutos de 8:00 a 18:00, y una vez por hora el resto del día\\.$/.test(escritos[escritos.length - 1].Resumen[1][0]));
   delete sheets['Correos Test'];
 
   // HTTP layer: CORS by origin, body limit, unknown route

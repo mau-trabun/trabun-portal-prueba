@@ -20,7 +20,7 @@ global.fetch = async (url, op = {}) => {
       const sel = r.split('!')[1];
       if (!sel) return { values: filas };
       if (sel === '1:1') return { values: [filas[0]] };
-      if (sel === '2:2') return { values: filas[1] ? [filas[1]] : [] };
+      if (sel === '3:3') return { values: filas[2] ? [filas[2]] : [] };
       const m = sel.match(/^([A-Z]+):([A-Z]+)$/);
       return { values: columna(filas, idx(m[1])) };
     }) });
@@ -56,17 +56,19 @@ global.fetch = async (url, op = {}) => {
   hojas = {};
   llamadas = [];
   const seg = crearSeguimiento('y');
-  const filas = n => [['Actualizado: …'], ['RBD', 'Respuestas', '%']].concat(Array.from({ length: n }, (_, i) => [10000 + i, i, 0.5]));
+  const filas = n => [['Actualizado: …'], ['Actualización automática …'], ['RBD', 'Respuestas', '%']].concat(Array.from({ length: n }, (_, i) => [10000 + i, i, 0.5]));
   await seg.escribir({ Resumen: filas(3), 'Por curso': filas(1500) });
   const crear = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
   Object.values(hojas).forEach(x => { if (!x.props.gridProperties) x.props.gridProperties = {}; });
   const add = crear.cuerpo.requests.filter(q => q.addSheet);
-  check('missing tabs created with frozen 2 rows and room for every row', add.length === 2 && add.every(q => q.addSheet.properties.gridProperties.frozenRowCount === 2)
-    && add[1].addSheet.properties.gridProperties.rowCount >= 1502);
-  check('header bold and "%" column as percent on creation', crear.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.fields === 'userEnteredFormat.textFormat.bold')
-    && crear.cuerpo.requests.filter(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat.numberFormat).every(q => q.repeatCell.range.startColumnIndex === 2 && q.repeatCell.range.startRowIndex === 2));
+  const congela = rs => rs.filter(q => q.updateSheetProperties).map(q => q.updateSheetProperties.properties.gridProperties.frozenRowCount);
+  check('missing tabs created with the 2 status lines + header frozen (3 rows) and room for every row', add.length === 2
+    && JSON.stringify(congela(crear.cuerpo.requests)) === '[3,3]' && add[1].addSheet.properties.gridProperties.rowCount >= 1503);
+  check('header (row 3) bold, status lines not, "%" column as percent from row 4 on creation', crear.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.range.startRowIndex === 2 && q.repeatCell.cell.userEnteredFormat.textFormat && q.repeatCell.cell.userEnteredFormat.textFormat.bold === true)
+    && crear.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.range.startRowIndex === 0 && q.repeatCell.range.endRowIndex === 2 && q.repeatCell.cell.userEnteredFormat.textFormat.bold === false)
+    && crear.cuerpo.requests.filter(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat.numberFormat).every(q => q.repeatCell.range.startColumnIndex === 2 && q.repeatCell.range.startRowIndex === 3));
   const val = llamadas.find(l => l.ruta.endsWith('values:batchUpdate'));
-  check('values written RAW from A1 (numbers stay numbers, nothing parsed as a date)', val.cuerpo.valueInputOption === 'RAW' && val.cuerpo.data[0].range === "'Resumen'!A1" && hojas.Resumen.filas[2][0] === 10000);
+  check('values written RAW from A1 (numbers stay numbers, nothing parsed as a date)', val.cuerpo.valueInputOption === 'RAW' && val.cuerpo.data[0].range === "'Resumen'!A1" && hojas.Resumen.filas[3][0] === 10000);
 
   // Second write, shorter: no tab creation, tail rows and columns cleared, never an empty tab in between
   llamadas = [];
@@ -76,19 +78,20 @@ global.fetch = async (url, op = {}) => {
   const limpiar = llamadas.find(l => l.ruta.endsWith('values:batchClear'));
   check('second write: no structural change, values before clears', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'))
     && llamadas.findIndex(l => l.ruta.endsWith('values:batchUpdate')) < llamadas.indexOf(limpiar));
-  check('second write: rows below and columns right of the new data cleared, within the grid', limpiar.cuerpo.ranges.includes("'Resumen'!A4:E103")
-    && limpiar.cuerpo.ranges.includes("'Resumen'!D1:E3") && limpiar.cuerpo.ranges.includes("'Por curso'!A1503:E1602"));
+  check('second write: rows below and columns right of the new data cleared, within the grid', limpiar.cuerpo.ranges.includes("'Resumen'!A5:E103")
+    && limpiar.cuerpo.ranges.includes("'Resumen'!D1:E4") && limpiar.cuerpo.ranges.includes("'Por curso'!A1504:E1602"));
 
   // Header changes (columns move) → number formats set again so "%" follows its column; same header → untouched
   const pctEn = (pedidos) => pedidos.filter(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat.numberFormat).map(q => q.repeatCell.range.startColumnIndex);
   llamadas = [];
-  const movida = n => [['Actualizado: …'], ['RBD', 'Coordinador/a', 'Respuestas', '%']].concat(Array.from({ length: n }, (_, i) => [10000 + i, '', i, 0.5]));
+  const movida = n => [['Actualizado: …'], ['Actualización automática …'], ['RBD', 'Coordinador/a', 'Respuestas', '%']].concat(Array.from({ length: n }, (_, i) => [10000 + i, '', i, 0.5]));
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
   const ref = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
   const enResumen = ref && ref.cuerpo.requests.filter(q => q.repeatCell && q.repeatCell.range.sheetId === hojas.Resumen.props.sheetId);
   check('header changed: % format moves to the new "%" column, the old one back to automatic; unchanged tab untouched', !!ref
     && JSON.stringify(pctEn(enResumen)) === '[3]' && enResumen.some(q => q.repeatCell.range.startColumnIndex === 2 && !q.repeatCell.cell.userEnteredFormat.numberFormat)
-    && !ref.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.range.sheetId === hojas['Por curso'].props.sheetId));
+    && !ref.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.range.sheetId === hojas['Por curso'].props.sheetId)
+    && JSON.stringify(congela(ref.cuerpo.requests)) === '[3]');
   llamadas = [];
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
   check('same header again: no formatting request', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));

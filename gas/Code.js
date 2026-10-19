@@ -603,7 +603,7 @@ function datosSeguimiento_() {
   };
 }
 
-// Pure: loaded data (cargarDatos_) + datosSeguimiento_() → { Resumen: rows, 'Por curso': rows }; row 0 = status line, row 1 = header.
+// Pure: loaded data (cargarDatos_) + datosSeguimiento_() → { Resumen: rows, 'Por curso': rows }; rows 0–1 = status lines, row 2 = header.
 // null when responses could not be read (the caller keeps the previous tracker instead of writing zeros).
 function seguimiento_(d, s, reloj) {
   if (!d.test) return null;
@@ -644,11 +644,11 @@ function seguimiento_(d, s, reloj) {
   const columnas = Object.keys(vistos).map(Number).sort((a, b) => a - b);
 
   const prog = p => (p.programa === 'ase' ? 'ASE' : 'REL');
-  const estado = 'Actualizado: ' + fecha(ms_(reloj.generado), true) + ` · se reescribe sola: cada 2 minutos de ${SEG_HORARIO.desde}:00 a `
-    + `${SEG_HORARIO.hasta}:00, y una vez por hora el resto del día. No edites aquí (usa vistas de filtro).`;
+  const estado = [['Actualizado: ' + fecha(ms_(reloj.generado), true)],
+    [`Actualización automática cada 2 minutos de ${SEG_HORARIO.desde}:00 a ${SEG_HORARIO.hasta}:00, y una vez por hora el resto del día.`]];
   // Two numeric columns per grade (responses, estimate) so the team can add them up
-  const resumen = [[estado], SEG_RESUMEN.concat([].concat.apply([], columnas.map(i => [NIVELES[i] + ' resp.', NIVELES[i] + ' est.'])))];
-  const cursos = [[estado], SEG_CURSOS.slice()];
+  const resumen = estado.concat([SEG_RESUMEN.concat([].concat.apply([], columnas.map(i => [NIVELES[i] + ' resp.', NIVELES[i] + ' est.'])))]);
+  const cursos = estado.concat([SEG_CURSOS.slice()]);
   filas.forEach(f => {
     const { t, p } = f;
     const pendientes = [];
