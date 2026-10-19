@@ -21,14 +21,19 @@ const recortar = rows => {
 };
 let lecturas = 0, faltan = [];
 const filasMetricas = [];
+let pedidas = [];
 const planilla = {
-  async leer(tabs, sinFechas) {
+  async leer(tabs, sinFechas, columnas = {}) {
     lecturas++;
+    pedidas = tabs.slice();
     const titulos = Object.keys(sheets).filter(t => !faltan.includes(t));
     const seriales = {}, formateados = {};
     tabs.filter(t => titulos.includes(t)).forEach(t => {
-      seriales[t] = recortar(sheets[t].map(r => r.map(v => (v instanceof Date ? aSerial(v) : v))));
-      if (!sinFechas.includes(t)) formateados[t] = recortar(sheets[t].map(r => r.map(v => (v instanceof Date ? pad(v.getDate()) + '-' + pad(v.getMonth() + 1) + '-' + v.getFullYear() : v))));
+      // columnas: only those headers' columns, as the real Sheets API read does
+      const idx = columnas[t] ? columnas[t].map(h => sheets[t][0].indexOf(h)).filter(i => i >= 0) : null;
+      const filas = idx ? sheets[t].map(r => idx.map(i => (r[i] == null ? '' : r[i]))) : sheets[t];
+      seriales[t] = recortar(filas.map(r => r.map(v => (v instanceof Date ? aSerial(v) : v))));
+      if (!sinFechas.includes(t) || idx) formateados[t] = recortar(filas.map(r => r.map(v => (v instanceof Date ? pad(v.getDate()) + '-' + pad(v.getMonth() + 1) + '-' + v.getFullYear() : v))));
     });
     return { titulos, seriales, formateados };
   },
@@ -116,6 +121,61 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   const l0 = lecturas;
   for (let i = 0; i < 5; i++) await svc6.manejar('POST', '/', JSON.stringify({ ...casos[0], refresco: true, fresco: true }));
   check('repeated Actualizar clicks: at most one Sheet read per 30 s', lecturas === l0);
+
+  // Team tracker: same rows as Code.js on the Apps Script harness, Correos Test read without its emails
+  check('tracker off by default: Métricas and Correos Test not read', !pedidas.includes('Métricas') && !pedidas.includes('Correos Test'));
+  sheets['Correos Test'] = [['RBD', 'Colegio', 'Para', 'CC', 'Enviar', 'Enviado'],
+    ['11111', 'x', 'enc@ejemplo.invalid', 'jdp@ejemplo.invalid', true, new Date(2026, 9, 9, 10, 15)], ['22222', 'x', 'otro@ejemplo.invalid', '', true, '']];
+  const escritos = [];
+  let escribirFalla = false;
+  const seg = { async escribir(tabs) { if (escribirFalla) throw new Error('Sheets 500'); escritos.push(JSON.parse(JSON.stringify(tabs))); } };
+  const svc7 = crearServicio({ src, planilla, seguimiento: seg, log: silencio });
+  await svc7.manejar('POST', '/refrescar', '');
+  await new Promise(r => setTimeout(r, 10));
+  const snapCorreos = svc7._estado().snap.tablas['Correos Test'];
+  check('tracker on: Métricas + Correos Test read, Correos Test only RBD + Enviado (no emails in memory)', pedidas.includes('Métricas')
+    && snapCorreos[0].join() === 'RBD,Enviado' && !JSON.stringify(snapCorreos).includes('ejemplo.invalid'));
+  ctx.Utilities.formatDate = formatDate; // the Apps Script harness with the same date formatter as Cloud Run
+  const esperado = ctx.seguimiento_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), ctx.reloj_());
+  const sinEstado = t => Object.keys(t).map(k => t[k].slice(1));
+  check('tracker written after a snapshot, rows identical to Code.js on Apps Script (2 tabs)', escritos.length === 1
+    && Object.keys(escritos[0]).join() === 'Resumen,Por curso' && JSON.stringify(sinEstado(escritos[0])) === JSON.stringify(sinEstado(esperado)));
+  check('tracker carries the email date (read from its Date cell)', escritos[0].Resumen.find(r => r[0] === 11111)[7] === '09-10-2026');
+  await post(casos[0]);
+  await new Promise(r => setTimeout(r, 10));
+  check('a login does not write the tracker (only snapshots do)', escritos.length === 1);
+  escribirFalla = true;
+  const svc8 = crearServicio({ src, planilla, seguimiento: seg, log: silencio });
+  check('tracker write failing never breaks a login', (await JSON.parse((await svc8.manejar('POST', '/', JSON.stringify(casos[0]))).cuerpo)).ok === true);
+  await new Promise(r => setTimeout(r, 10)); // let svc8's failing write finish first
+  escribirFalla = false;
+  faltan = ['Respuestas Test'];
+  const n0 = escritos.length;
+  const svc9 = crearServicio({ src, planilla, seguimiento: seg, log: silencio });
+  await svc9.manejar('POST', '/refrescar', '');
+  await new Promise(r => setTimeout(r, 10));
+  check('responses unreadable → tracker not overwritten', escritos.length === n0);
+  faltan = [];
+
+  // Schedule: every snapshot from 8:00 to 18:00 (Santiago), otherwise the first snapshot of each clock hour
+  let reloj = new Date(2026, 9, 19, 17, 56);
+  const svc10 = crearServicio({ src, planilla, seguimiento: seg, log: silencio, minEntreMs: 0, ahora: () => reloj });
+  const tic = async (h, m, dia = 19) => { reloj = new Date(2026, 9, dia, h, m); await svc10.manejar('POST', '/refrescar', ''); await new Promise(r => setTimeout(r, 10)); };
+  const e0 = escritos.length;
+  await tic(17, 56); await tic(17, 58);
+  const enHorario = escritos.length - e0;
+  await tic(18, 0); await tic(18, 2); await tic(18, 58);
+  const tarde = escritos.length - e0 - enHorario;
+  await tic(19, 0); await tic(19, 30);
+  const sigHora = escritos.length - e0 - enHorario - tarde;
+  await tic(7, 56, 20); await tic(7, 58, 20);
+  const manana = escritos.length - e0 - enHorario - tarde - sigHora;
+  await tic(8, 0, 20); await tic(8, 2, 20);
+  const vuelta = escritos.length - e0 - enHorario - tarde - sigHora - manana;
+  check('tracker schedule: every snapshot 8–18 h, then once per clock hour (18:00, 19:00, 7:00…)', enHorario === 2 && tarde === 1 && sigHora === 1 && manana === 1);
+  check('tracker schedule: back to every snapshot at 8:00', vuelta === 2);
+  check('status line states the schedule', /cada 2 minutos de 8:00 a 18:00, y una vez por hora/.test(escritos[escritos.length - 1].Resumen[0][0]));
+  delete sheets['Correos Test'];
 
   // HTTP layer: CORS by origin, body limit, unknown route
   const srv = crearServidor(svc, ['https://mau-trabun.github.io']).listen(0);

@@ -78,7 +78,10 @@ function pideFresco(cuerpo) {
 // ttlMs: older → refresh behind the reply. maxEdadMs: older → wait for fresh data.
 // frescoMs: the "Actualizar" button (body fresco:true) waits for a re-read when the copy is older than this.
 // minEntreMs: at most one Sheet read started per this interval from requests (protects the Sheets API).
-function crearServicio({ src, planilla, ttlMs = 3 * 60 * 1000, maxEdadMs = 10 * 60 * 1000, frescoMs = 15 * 1000, minEntreMs = 30 * 1000, log = console }) {
+// seguimiento: { escribir(tabs) } for the team tracker (separate Sheet); null = off. Rewritten after every snapshot
+// during Code.js SEG_HORARIO (Santiago time, school hours), otherwise once per clock hour (first snapshot of the hour).
+// ahora: clock, for tests.
+function crearServicio({ src, planilla, seguimiento = null, ahora = () => new Date(), ttlMs = 3 * 60 * 1000, maxEdadMs = 10 * 60 * 1000, frescoMs = 15 * 1000, minEntreMs = 30 * 1000, log = console }) {
   let snap = null;      // { titulos: Set, tablas: {tab: values}, leido }
   let datos = null;     // cargarDatos_() result for the current snapshot (or its error)
   let cargando = null;
@@ -95,6 +98,15 @@ function crearServicio({ src, planilla, ttlMs = 3 * 60 * 1000, maxEdadMs = 10 * 
   const TZ = vm.runInContext('TZ', ctx);
   const lectura = Object.keys(TABS).filter(k => k !== 'metricas').map(k => TABS[k]);
   const sinFechas = [TABS.respTest]; // the big tab: no date column is read from it
+  const columnas = {};
+  if (seguimiento) { // the tracker also needs portal use and the email date: only RBD + Enviado, never the emails
+    const correos = vm.runInContext('TAB_CORREOS', ctx);
+    lectura.push(TABS.metricas, correos);
+    columnas[correos] = ['RBD', 'Enviado'];
+  }
+  let escribiendo = false;
+  let ultimaHoraEscrita = null; // 'yyyy-MM-dd HH' of the last tracker write
+  const HORARIO = vm.runInContext('SEG_HORARIO', ctx);
   const cargarDatosOriginal = ctx.cargarDatos_;
   // Built once per snapshot instead of per login (Code.js keeps it a pure function of the Sheet)
   ctx.cargarDatos_ = () => { if (datos.error) throw datos.error; return datos.valor; };
@@ -104,14 +116,32 @@ function crearServicio({ src, planilla, ttlMs = 3 * 60 * 1000, maxEdadMs = 10 * 
     ultimoIntento = Date.now();
     cargando = (async () => {
       const t0 = Date.now();
-      const raw = await planilla.leer(lectura, sinFechas);
+      const raw = await planilla.leer(lectura, sinFechas, columnas);
       const tablas = {};
       Object.keys(raw.seriales).forEach(t => { tablas[t] = comoGetValues(raw.seriales[t], raw.formateados[t]); });
       snap = { titulos: new Set(raw.titulos), tablas, leido: Date.now() };
       try { datos = { valor: cargarDatosOriginal() }; } catch (error) { datos = { error }; }
       log.log(`snapshot ${Date.now() - t0} ms`); // timing only
+      setImmediate(() => { escribirSeguimiento(); }); // never makes a login wait
     })().finally(() => { cargando = null; });
     return cargando;
+  }
+
+  // Skipped when a write is still running (the next snapshot writes) or responses could not be read (keeps the old tracker)
+  async function escribirSeguimiento() {
+    if (!seguimiento || escribiendo || !datos || datos.error) return;
+    const hora = formatDate(ahora(), TZ, 'yyyy-MM-dd HH');
+    const h = Number(hora.slice(-2));
+    if ((h < HORARIO.desde || h >= HORARIO.hasta) && hora === ultimaHoraEscrita) return; // off hours: once per hour
+    escribiendo = true;
+    try {
+      const tabs = ctx.seguimiento_(datos.valor, ctx.datosSeguimiento_(), ctx.reloj_());
+      if (tabs) { await seguimiento.escribir(tabs); ultimaHoraEscrita = hora; }
+    } catch (e) {
+      log.error('seguimiento: ' + e.message);
+    } finally {
+      escribiendo = false;
+    }
   }
 
   async function asegurarFresco(fresco) {

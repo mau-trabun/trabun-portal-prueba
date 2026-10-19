@@ -570,6 +570,113 @@ function registrarEvento_(rbd, body) {
   return { ok: true };
 }
 
+// ── Seguimiento interno (team tracker; Cloud Run writes it to a separate Sheet) ─
+// Counts only, never names: one row per school-program (Resumen) and one per class (Por curso), built with panel_()
+// so every number matches what the school sees. Plus the announcement email date (Correos Test → Enviado) and
+// portal use (Métricas). The tracker Sheet holds no claves or emails, so the team can open it.
+
+const SEG_TABS = { resumen: 'Resumen', cursos: 'Por curso' };
+// Cloud Run rewrites the tracker after every snapshot (every 2 min) from desde to hasta h (Santiago); otherwise once per hour
+const SEG_HORARIO = { desde: 8, hasta: 18 };
+const SEG_ACCIONES = { test_copiar_link: 'link', test_copiar_mensaje: 'mensaje', test_whatsapp: 'WhatsApp', test_qr: 'QR',
+  test_instructivo: 'instructivo', test_copiar_lista: 'lista por curso', test_whatsapp_lista: 'lista por curso' };
+const SEG_RESUMEN = ['RBD', 'Colegio', 'Comuna', 'Programa', 'Modelo', 'EDI', 'Jefe/a de Proyecto', 'Correo enviado',
+  'Ingresos al portal', 'Último ingreso', 'Compartió el Test', 'Respuestas', 'Estimado', '%', 'Cursos sin respuestas'];
+const SEG_CURSOS = ['RBD', 'Colegio', 'Programa', 'Modelo', 'Jefe/a de Proyecto', 'Nivel', 'Curso', 'Respuestas', 'Estimado', '%', 'Registrado'];
+
+// Extra sources, each optional (missing tab or header → blank columns). Cloud Run reads only RBD + Enviado of Correos Test.
+function datosSeguimiento_() {
+  return {
+    enviados: intentar_(TAB_CORREOS, () => {
+      const t = leerTabla_(TAB_CORREOS);
+      const cR = colExacta_(t, 'RBD'), cE = colExacta_(t, 'Enviado');
+      const out = {};
+      t.rows.forEach(r => { const rbd = normRbd_(r[cR]); if (rbd && r[cE] !== '' && r[cE] != null) out[rbd] = r[cE]; });
+      return out;
+    }, {}),
+    metricas: intentar_(TABS.metricas, () => {
+      const t = leerTabla_(TABS.metricas);
+      const c = { ts: colExacta_(t, 'timestamp'), rbd: colExacta_(t, 'rbd'), prog: colExacta_(t, 'programas'), ev: colExacta_(t, 'evento') };
+      return t.rows.map(r => ({ ms: ms_(r[c.ts]), rbd: normRbd_(r[c.rbd]), programa: programa_(r[c.prog]), evento: String(r[c.ev]).trim() }))
+        .filter(x => x.rbd);
+    }, []),
+  };
+}
+
+// Pure: loaded data (cargarDatos_) + datosSeguimiento_() → { Resumen: rows, 'Por curso': rows }; row 0 = status line, row 1 = header.
+// null when responses could not be read (the caller keeps the previous tracker instead of writing zeros).
+function seguimiento_(d, s, reloj) {
+  if (!d.test) return null;
+  const porRbd = agrupar_(d.test, x => x.rbd);
+  const uso = {};
+  s.metricas.forEach(m => {
+    const u = uso[m.rbd] || (uso[m.rbd] = { ingresos: 0, ultimo: null, acciones: { ase: [], rel: [] } });
+    if (m.evento === 'login') {
+      u.ingresos++;
+      if (m.ms != null && (u.ultimo == null || m.ms > u.ultimo)) u.ultimo = m.ms;
+    } else if (SEG_ACCIONES[m.evento] && u.acciones[m.programa] && u.acciones[m.programa].indexOf(SEG_ACCIONES[m.evento]) < 0) {
+      u.acciones[m.programa].push(SEG_ACCIONES[m.evento]);
+    }
+  });
+  const fecha = (v, conHora) => {
+    const ms = typeof v === 'number' ? v : ms_(v);
+    if (ms == null) return v === '' || v == null ? '' : String(v);
+    return Utilities.formatDate(new Date(ms), TZ, conHora ? 'dd-MM-yyyy HH:mm' : 'dd-MM-yyyy');
+  };
+  const corto = n => n.split(' ')[0]; // "7° básico" → "7°", "I° medio" → "I°"
+  const pct = (r, est) => (est ? Math.round(r / est * 1000) / 1000 : '');
+
+  const filas = [];
+  Object.keys(d.sf).forEach(rbd => {
+    const res = panel_(rbd, Object.assign({}, d, { test: porRbd[rbd] || [], efa: null }), reloj);
+    res.programas.forEach(p => {
+      const t = p.test;
+      if (!t.niveles.length || (normTexto_(p.modelo) === 'control' && !t.resumen.r)) return; // paper-only, no Test, Control
+      filas.push({ rbd, col: res.colegio, p, t, u: uso[rbd] || { ingresos: 0, ultimo: null, acciones: { ase: [], rel: [] } } });
+    });
+  });
+  filas.sort((a, b) => compararTexto_(a.p.jefeProyecto, b.p.jefeProyecto) || compararTexto_(a.col.nombre, b.col.nombre)
+    || (a.p.programa < b.p.programa ? -1 : a.p.programa > b.p.programa ? 1 : 0));
+
+  // Grade columns: every grade that shows up (registered, seen or on paper), canonical order
+  const vistos = {};
+  filas.forEach(f => f.t.niveles.concat(f.t.nivelesPapel.map(n => ({ nivel: n }))).forEach(n => { vistos[nivelIdx_(n.nivel)] = true; }));
+  const columnas = Object.keys(vistos).map(Number).sort((a, b) => a - b);
+
+  const prog = p => (p.programa === 'ase' ? 'ASE' : 'REL');
+  const estado = 'Actualizado: ' + fecha(ms_(reloj.generado), true) + ` · se reescribe sola: cada 2 minutos de ${SEG_HORARIO.desde}:00 a `
+    + `${SEG_HORARIO.hasta}:00, y una vez por hora el resto del día. No edites aquí (usa vistas de filtro).`;
+  const resumen = [[estado], SEG_RESUMEN.concat(columnas.map(i => NIVELES[i]))];
+  const cursos = [[estado], SEG_CURSOS.slice()];
+  filas.forEach(f => {
+    const { t, p } = f;
+    const pendientes = [];
+    t.niveles.filter(n => n.registrado).forEach(n => {
+      const reg = n.cursos.filter(c => c.registrado);
+      if (reg.length) reg.filter(c => !c.r).forEach(c => pendientes.push(corto(n.nivel) + c.letra));
+      else if (!n.r) pendientes.push(n.nivel);
+    });
+    const celda = i => {
+      const n = t.niveles.find(x => x.nivel === NIVELES[i]);
+      if (n) return !n.registrado ? n.r + ' · fuera de lo registrado' : n.est ? n.r + ' / ~' + n.est : String(n.r);
+      return t.nivelesPapel.indexOf(NIVELES[i]) >= 0 ? 'Papel' : '';
+    };
+    resumen.push([Number(f.rbd), f.col.nombre || '', f.col.comuna || '', prog(p), p.modelo || '', p.edi ? 'SÍ' : '', p.jefeProyecto || '',
+      fecha(s.enviados[f.rbd], false), f.u.ingresos, fecha(f.u.ultimo, true),
+      f.u.acciones[p.programa].join(', '), t.resumen.r, t.resumen.est || '', pct(t.resumen.rConEst, t.resumen.est),
+      pendientes.join(', ')].concat(columnas.map(celda)));
+    t.niveles.forEach(n => n.cursos.forEach(c => {
+      cursos.push([Number(f.rbd), f.col.nombre || '', prog(p), p.modelo || '', p.jefeProyecto || '', n.nivel,
+        c.letra ? corto(n.nivel) + ' ' + c.letra : 'Sin letra', c.r, c.est || '', pct(c.r, c.est),
+        n.registrado && c.registrado ? 'Sí' : 'Fuera de lo registrado']);
+    }));
+  });
+  const out = {};
+  out[SEG_TABS.resumen] = resumen;
+  out[SEG_TABS.cursos] = cursos;
+  return out;
+}
+
 // ── Normalization ───────────────────────────────────────────
 
 const NIVEL_IDX = {};

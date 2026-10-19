@@ -4,7 +4,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { crearServicio } = require('./app');
-const { crearPlanilla } = require('./sheets');
+const { crearPlanilla, crearSeguimiento } = require('./sheets');
 
 const MAX_CUERPO = 10 * 1024;
 // deploy.sh copies gas/Code.js next to this file; locally it is read from the repo
@@ -45,7 +45,8 @@ if (require.main === module) {
   const id = process.env.SHEET_ID;
   if (!id) { console.error('Falta SHEET_ID'); process.exit(1); }
   const origenes = (process.env.ORIGENES || 'https://mau-trabun.github.io,https://portal.fundaciontrabun.cl').split(',').map(s => s.trim());
-  const servicio = crearServicio({ src: fs.readFileSync(CODIGO, 'utf8'), planilla: crearPlanilla(id) });
+  const seg = process.env.SEGUIMIENTO_ID; // team tracker Sheet; unset = not written
+  const servicio = crearServicio({ src: fs.readFileSync(CODIGO, 'utf8'), planilla: crearPlanilla(id), seguimiento: seg ? crearSeguimiento(seg) : null });
   crearServidor(servicio, origenes).listen(Number(process.env.PORT) || 8080, () => console.log('portal-api listo'));
 }
 

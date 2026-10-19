@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploys the portal API to Cloud Run. Run in Cloud Shell from the repo root, with the project selected:
-#   SHEET_ID=<id de la planilla> bash cloudrun/deploy.sh staging     (or prod)
-# The Sheet ID is passed at deploy time and never stored in the repo.
+#   SHEET_ID=<id de la planilla> [SEGUIMIENTO_ID=<id del seguimiento interno>] bash cloudrun/deploy.sh staging     (or prod)
+# Sheet IDs are passed at deploy time and never stored in the repo. Without SEGUIMIENTO_ID the team tracker is not written.
 set -euo pipefail
 ENTORNO="${1:-}"
 case "$ENTORNO" in staging|prod) ;; *) echo "Uso: SHEET_ID=<id> bash cloudrun/deploy.sh staging|prod"; exit 1 ;; esac
@@ -18,7 +18,7 @@ gcloud run deploy "portal-api-${ENTORNO}" \
   --region "$REGION" \
   --service-account "portal-api@${PROYECTO}.iam.gserviceaccount.com" \
   --no-invoker-iam-check \
-  --set-env-vars "SHEET_ID=${SHEET_ID}" \
+  --set-env-vars "SHEET_ID=${SHEET_ID}${SEGUIMIENTO_ID:+,SEGUIMIENTO_ID=${SEGUIMIENTO_ID}}" \
   --memory 1Gi --cpu 1 \
   --min-instances 0 --max-instances 1 --concurrency 80 \
   --timeout 60
