@@ -78,54 +78,63 @@ function letra(n) {
 
 // The team tracker (a separate Sheet, shared with the service account as editor). Each write replaces every tab's
 // values in place (no flash of an empty tab), then clears what is left of a longer previous version.
-// A missing tab is created with the header row frozen and bold and "%" columns as percentages. When the header
-// (row 3) changes, number formats, bold and frozen rows are set again so a "%" never lands on a count; otherwise the team's own
-// formatting is kept (only values are written).
+// The layout's formatting (frozen rows, bold header, "%" as percent, gray bands per grade) is applied to a new tab and
+// again whenever the layout changes (header, bands or FORMATO_V), tracked by a developer-metadata marker on each tab;
+// otherwise only values are written, so the team's own formatting stays.
 const ENC = 2; // 0-based header row of every tracker tab: rows 1–2 are the status lines (seguimiento_() in Code.js)
+const FORMATO_V = 1; // bump to re-apply the formatting to existing tabs once
+const MARCA = 'seguimiento_formato';
+const GRIS = { red: 0.933, green: 0.933, blue: 0.933 }, BLANCO = { red: 1, green: 1, blue: 1 };
 
 function crearSeguimiento(id) {
   const base = 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(id);
   const rango = t => "'" + t.replace(/'/g, "''") + "'";
   const post = (ruta, cuerpo) => api(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
-  // Header bold; data rows: "%" columns as percent, every other column back to automatic
-  // Status lines above, header bold and frozen with them; data rows: "%" columns as percent, every other column back to automatic
-  const formatos = (sheetId, encabezado) => [
+  // Status lines above, header bold and frozen with them; header + data: gray or white per column;
+  // data rows: "%" columns as percent, every other column back to automatic
+  const col = (sheetId, desde, j) => ({ sheetId, startRowIndex: desde, startColumnIndex: j, endColumnIndex: j + 1 });
+  const formatos = (sheetId, encabezado, gris) => [
     { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: ENC + 1 } }, fields: 'gridProperties.frozenRowCount' } },
     { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: ENC }, cell: { userEnteredFormat: { textFormat: { bold: false } } }, fields: 'userEnteredFormat.textFormat.bold' } },
     { repeatCell: { range: { sheetId, startRowIndex: ENC, endRowIndex: ENC + 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } }]
-    .concat(encabezado.map((t, j) => ({ repeatCell: { range: { sheetId, startRowIndex: ENC + 1, startColumnIndex: j, endColumnIndex: j + 1 },
+    .concat(encabezado.map((t, j) => ({ repeatCell: { range: col(sheetId, ENC, j),
+      cell: { userEnteredFormat: { backgroundColor: gris.indexOf(j) >= 0 ? GRIS : BLANCO } }, fields: 'userEnteredFormat.backgroundColor' } })))
+    .concat(encabezado.map((t, j) => ({ repeatCell: { range: col(sheetId, ENC + 1, j),
       cell: { userEnteredFormat: t === '%' ? { numberFormat: { type: 'PERCENT', pattern: '0%' } } : {} }, fields: 'userEnteredFormat.numberFormat' } })));
   const notasEscritas = {}; // tab → notes last written (with its sheetId), so unchanged notes are not rewritten every 2 min
   return {
     // notas: {tab: [[row, col, text]]} (0-based). Each tab's data-area notes are replaced as a whole when they change.
-    async escribir(tabs, notas = {}) {
-      const meta = await api(base + '?fields=sheets.properties(title,sheetId,gridProperties)');
-      const hojas = {};
-      meta.sheets.forEach(s => { hojas[s.properties.title] = s.properties; });
+    // formato: {tab: {gris: [cols]}}: columns shaded gray (header and data).
+    async escribir(tabs, notas = {}, formato = {}) {
+      const meta = await api(base + '?fields=sheets(properties(title,sheetId,gridProperties),developerMetadata(metadataId,metadataKey,metadataValue))');
+      const hojas = {}, marcas = {};
+      meta.sheets.forEach(s => {
+        hojas[s.properties.title] = s.properties;
+        marcas[s.properties.title] = (s.developerMetadata || []).find(m => m.metadataKey === MARCA) || null;
+      });
       const usados = new Set(meta.sheets.map(s => s.properties.sheetId));
       const pedidos = [];
       const nombres = Object.keys(tabs);
-      const existentes = nombres.filter(n => hojas[n]);
-      const actuales = {}; // current header row of each existing tab
-      if (existentes.length) {
-        const j = await api(base + '/values:batchGet?' + new URLSearchParams(existentes.map(n => ['ranges', rango(n) + '!' + (ENC + 1) + ':' + (ENC + 1)])));
-        existentes.forEach((n, i) => { actuales[n] = ((j.valueRanges[i].values || [])[0] || []).map(String); });
-      }
       nombres.forEach(n => {
         const filas = tabs[n], alto = filas.length, ancho = filas.reduce((m, r) => Math.max(m, r.length), 1);
         const h = hojas[n];
+        const encabezado = filas[ENC] || [], gris = (formato[n] && formato[n].gris) || [];
+        const valor = JSON.stringify({ v: FORMATO_V, encabezado, gris });
+        const marcar = sheetId => (marcas[n]
+          ? { updateDeveloperMetadata: { dataFilters: [{ developerMetadataLookup: { metadataId: marcas[n].metadataId } }], developerMetadata: { metadataValue: valor }, fields: 'metadataValue' } }
+          : { createDeveloperMetadata: { developerMetadata: { metadataKey: MARCA, metadataValue: valor, location: { sheetId }, visibility: 'DOCUMENT' } } });
         if (!h) {
           let sheetId;
           do { sheetId = 1 + Math.floor(Math.random() * 2e9); } while (usados.has(sheetId));
           usados.add(sheetId);
           pedidos.push({ addSheet: { properties: { sheetId, title: n, gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } } } });
-          pedidos.push(...formatos(sheetId, filas[ENC] || []));
+          pedidos.push(...formatos(sheetId, encabezado, gris), marcar(sheetId));
           hojas[n] = { sheetId, gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } };
         } else {
           const g = h.gridProperties || {};
           if ((g.rowCount || 0) < alto) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'ROWS', length: alto - (g.rowCount || 0) + 100 } });
           if ((g.columnCount || 0) < ancho) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'COLUMNS', length: ancho - (g.columnCount || 0) + 2 } });
-          if ((filas[ENC] || []).join('\u0001') !== actuales[n].join('\u0001')) pedidos.push(...formatos(h.sheetId, filas[ENC] || []));
+          if (!marcas[n] || marcas[n].metadataValue !== valor) pedidos.push(...formatos(h.sheetId, encabezado, gris), marcar(h.sheetId));
         }
       });
       if (pedidos.length) await post(':batchUpdate', { requests: pedidos });

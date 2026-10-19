@@ -129,7 +129,8 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   const escritos = [];
   let escribirFalla = false;
   const notasEscritas = [];
-  const seg = { async escribir(tabs, notas) { if (escribirFalla) throw new Error('Sheets 500'); escritos.push(JSON.parse(JSON.stringify(tabs))); notasEscritas.push(notas); } };
+  const formatosEscritos = [];
+  const seg = { async escribir(tabs, notas, formato) { if (escribirFalla) throw new Error('Sheets 500'); escritos.push(JSON.parse(JSON.stringify(tabs))); notasEscritas.push(notas); formatosEscritos.push(formato); } };
   const svc7 = crearServicio({ src, planilla, seguimiento: seg, log: silencio });
   await svc7.manejar('POST', '/refrescar', '');
   await new Promise(r => setTimeout(r, 10));
@@ -141,7 +142,8 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   const sinEstado = t => Object.keys(t).map(k => t[k].slice(1)); // row 1 carries the time
   check('tracker written after a snapshot, rows identical to Code.js on Apps Script (2 tabs)', escritos.length === 1
     && Object.keys(escritos[0]).join() === 'Resumen,Por curso' && JSON.stringify(sinEstado(escritos[0])) === JSON.stringify(sinEstado(esperado.tabs)));
-  check('tracker notes passed to the writer, identical to Code.js on Apps Script', JSON.stringify(notasEscritas[0]) === JSON.stringify(esperado.notas) && notasEscritas[0].Resumen.length > 0);
+  check('tracker notes passed to the writer, identical to Code.js on Apps Script', JSON.stringify(notasEscritas[0]) === JSON.stringify(esperado.notas) && notasEscritas[0].Resumen.length > 0
+    && JSON.stringify(formatosEscritos[0]) === JSON.stringify(esperado.formato) && formatosEscritos[0].Resumen.gris.length > 0);
   check('tracker carries the email date (read from its Date cell)', escritos[0].Resumen.find(r => r[0] === 11111)[escritos[0].Resumen[2].indexOf('Correo enviado')] === '09-10-2026');
   await post(casos[0]);
   await new Promise(r => setTimeout(r, 10));

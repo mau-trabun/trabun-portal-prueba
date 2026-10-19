@@ -87,5 +87,10 @@ check('note: answers over the estimate (grade and class), with the estimate', no
   && nota2('Por curso', 'Respuestas', x => x[7] === '4° A') === '1 sobre lo estimado.' && nota2('Por curso', 'Respuestas', x => x[7] === '4° B') === undefined);
 check('note: no estimate (grade and registered class)', nota2('Resumen', '6° básico est.') === 'Sin estimado: SF no tiene Alumnos para este nivel. No cuenta en el %.'
   && nota2('Por curso', 'Estimado', x => x[7] === '6° B') === 'Sin estimado: falta Alumnos o CxN en SF.');
+check('gray bands: every other grade, both its resp. and est. columns; none in Por curso', (() => {
+  const g = out.formato['Resumen'].gris;
+  return g.slice(0, 4).map(c => h[c]).join() === '4° básico resp.,4° básico est.,6° básico resp.,6° básico est.'
+    && !g.some(c => / básico| medio/.test(h[c]) && h.indexOf(h[c]) < 15) && g.length === 10 && out.formato['Por curso'].gris.length === 0;
+})());
 check('responses tab unreadable → null (keep the previous tracker)', ctx.seguimiento_(Object.assign({}, d, { test: null }), s, reloj) === null);
 `);

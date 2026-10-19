@@ -26,7 +26,19 @@ global.fetch = async (url, op = {}) => {
     }) });
   }
   if (u.pathname.endsWith(':batchUpdate') && !u.pathname.includes('/values')) {
-    cuerpo.requests.forEach(q => { if (q.addSheet) hojas[q.addSheet.properties.title] = { props: q.addSheet.properties, filas: [] }; });
+    cuerpo.requests.forEach(q => {
+      if (q.addSheet) hojas[q.addSheet.properties.title] = { props: q.addSheet.properties, filas: [] };
+      if (q.createDeveloperMetadata) {
+        const m = q.createDeveloperMetadata.developerMetadata;
+        const t = Object.keys(hojas).find(k => hojas[k].props.sheetId === m.location.sheetId);
+        hojas[t].marca = { metadataId: Math.floor(Math.random() * 1e9), metadataKey: m.metadataKey, metadataValue: m.metadataValue };
+      }
+      if (q.updateDeveloperMetadata) {
+        const id = q.updateDeveloperMetadata.dataFilters[0].developerMetadataLookup.metadataId;
+        const t = Object.keys(hojas).find(k => hojas[k].marca && hojas[k].marca.metadataId === id);
+        hojas[t].marca.metadataValue = q.updateDeveloperMetadata.developerMetadata.metadataValue;
+      }
+    });
     return respuesta({});
   }
   if (u.pathname.endsWith('/values:batchUpdate')) {
@@ -34,7 +46,8 @@ global.fetch = async (url, op = {}) => {
     return respuesta({});
   }
   if (u.pathname.endsWith('/values:batchClear')) return respuesta({});
-  return respuesta({ sheets: Object.keys(hojas).map((t, i) => ({ properties: Object.assign({ title: t, sheetId: i + 1, gridProperties: { rowCount: 1000, columnCount: 26 } }, hojas[t].props) })) });
+  return respuesta({ sheets: Object.keys(hojas).map((t, i) => ({ properties: Object.assign({ title: t, sheetId: i + 1, gridProperties: { rowCount: 1000, columnCount: 26 } }, hojas[t].props),
+    developerMetadata: hojas[t].marca ? [hojas[t].marca] : [] })) });
 };
 
 (async () => {
@@ -98,6 +111,27 @@ global.fetch = async (url, op = {}) => {
   llamadas = [];
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
   check('same header again: no formatting request', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));
+  check('format marker kept on each tab (version + header)', JSON.parse(hojas.Resumen.marca.metadataValue).encabezado.join() === 'RBD,Coordinador/a,Respuestas,%'
+    && JSON.parse(hojas['Por curso'].marca.metadataValue).v >= 1);
+
+  // Gray bands: given columns gray in header + data, the rest white; applied once, then left to the team
+  const fondo = (rs, sheetId) => rs.filter(q => q.repeatCell && q.repeatCell.fields === 'userEnteredFormat.backgroundColor' && q.repeatCell.range.sheetId === sheetId)
+    .map(q => q.repeatCell.range.startColumnIndex + ':' + (q.repeatCell.cell.userEnteredFormat.backgroundColor.red < 1 ? 'gris' : 'blanco') + '@' + q.repeatCell.range.startRowIndex);
+  llamadas = [];
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, {}, { Resumen: { gris: [1, 2] } });
+  const bandas = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
+  check('bands: gray columns from the header row down, others white; only the changed tab', bandas
+    && fondo(bandas.cuerpo.requests, hojas.Resumen.props.sheetId).join() === '0:blanco@2,1:gris@2,2:gris@2,3:blanco@2'
+    && !fondo(bandas.cuerpo.requests, hojas['Por curso'].props.sheetId).length);
+  llamadas = [];
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, {}, { Resumen: { gris: [1, 2] } });
+  check('bands unchanged: nothing re-applied (team formatting stays)', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));
+  delete hojas.Resumen.marca;
+  llamadas = [];
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, {}, { Resumen: { gris: [1, 2] } });
+  const rollout = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
+  check('existing tab without a marker (older version): formatted once and marked', rollout && fondo(rollout.cuerpo.requests, hojas.Resumen.props.sheetId).length === 4
+    && rollout.cuerpo.requests.some(q => q.createDeveloperMetadata) && !!hojas.Resumen.marca);
 
   // Notes: data-area notes cleared and set after the values; unchanged notes not resent; changed ones replaced
   llamadas = [];

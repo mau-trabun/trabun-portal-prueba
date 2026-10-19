@@ -603,8 +603,10 @@ function datosSeguimiento_() {
   };
 }
 
-// Pure: loaded data (cargarDatos_) + datosSeguimiento_() → { tabs: { Resumen: rows, 'Por curso': rows }, notas: { tab: [[row, col, text]] } };
-// rows 0–1 = status lines, row 2 = header; notas (0-based cells) explain unexpected cases with the portal's wording.
+// Pure: loaded data (cargarDatos_) + datosSeguimiento_() →
+//   { tabs: { Resumen: rows, 'Por curso': rows }, notas: { tab: [[row, col, text]] }, formato: { tab: { gris: [cols] } } };
+// rows 0–1 = status lines, row 2 = header; notas (0-based cells) explain unexpected cases with the portal's wording;
+// gris = columns shaded gray, so each grade's resp. + est. pair reads as one block (alternating gray / white).
 // null when responses could not be read (the caller keeps the previous tracker instead of writing zeros).
 function seguimiento_(d, s, reloj) {
   if (!d.test) return null;
@@ -709,12 +711,14 @@ function seguimiento_(d, s, reloj) {
         n.registrado && c.registrado ? 'Sí' : 'Fuera de lo registrado']);
     }));
   });
-  const tabs = {}, notas = {};
+  const tabs = {}, notas = {}, formato = {};
   tabs[SEG_TABS.resumen] = resumen;
   tabs[SEG_TABS.cursos] = cursos;
   notas[SEG_TABS.resumen] = notasR;
   notas[SEG_TABS.cursos] = notasC;
-  return { tabs, notas };
+  formato[SEG_TABS.resumen] = { gris: [].concat.apply([], columnas.map((_, k) => (k % 2 ? [] : [base + 2 * k, base + 2 * k + 1]))) };
+  formato[SEG_TABS.cursos] = { gris: [] };
+  return { tabs, notas, formato };
 }
 
 // ── Normalization ───────────────────────────────────────────

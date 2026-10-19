@@ -136,7 +136,7 @@ function crearServicio({ src, planilla, seguimiento = null, ahora = () => new Da
     escribiendo = true;
     try {
       const res = ctx.seguimiento_(datos.valor, ctx.datosSeguimiento_(), ctx.reloj_());
-      if (res) { await seguimiento.escribir(res.tabs, res.notas); ultimaHoraEscrita = hora; }
+      if (res) { await seguimiento.escribir(res.tabs, res.notas, res.formato); ultimaHoraEscrita = hora; }
     } catch (e) {
       log.error('seguimiento: ' + e.message);
     } finally {
