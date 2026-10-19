@@ -70,6 +70,9 @@ global.fetch = async (url, op = {}) => {
   const val = llamadas.find(l => l.ruta.endsWith('values:batchUpdate'));
   check('values written RAW from A1 (numbers stay numbers, nothing parsed as a date)', val.cuerpo.valueInputOption === 'RAW' && val.cuerpo.data[0].range === "'Resumen'!A1" && hojas.Resumen.filas[3][0] === 10000);
 
+  check('short rows padded to the full width (old cells to their right are blanked)', val.cuerpo.data.every(d => d.values.every(r => r.length === 3))
+    && JSON.stringify(val.cuerpo.data[0].values[1]) === JSON.stringify(['Actualización automática …', '', '']));
+
   // Second write, shorter: no tab creation, tail rows and columns cleared, never an empty tab in between
   llamadas = [];
   hojas.Resumen.props.gridProperties = { rowCount: 103, columnCount: 5 };

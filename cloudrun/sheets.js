@@ -129,7 +129,9 @@ function crearSeguimiento(id) {
         }
       });
       if (pedidos.length) await post(':batchUpdate', { requests: pedidos });
-      await post('/values:batchUpdate', { valueInputOption: 'RAW', data: nombres.map(n => ({ range: rango(n) + '!A1', values: tabs[n] })) });
+      // Every row padded to the tab's width: a short row (the status lines) must blank what an older layout left there
+      const relleno = filas => { const ancho = filas.reduce((m, r) => Math.max(m, r.length), 1); return filas.map(r => r.concat(Array(ancho - r.length).fill(''))); };
+      await post('/values:batchUpdate', { valueInputOption: 'RAW', data: nombres.map(n => ({ range: rango(n) + '!A1', values: relleno(tabs[n]) })) });
       const limpiar = [];
       nombres.forEach(n => {
         const filas = tabs[n], alto = filas.length, ancho = filas.reduce((m, r) => Math.max(m, r.length), 1);
