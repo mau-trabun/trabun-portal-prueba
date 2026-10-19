@@ -20,6 +20,7 @@ global.fetch = async (url, op = {}) => {
       const sel = r.split('!')[1];
       if (!sel) return { values: filas };
       if (sel === '1:1') return { values: [filas[0]] };
+      if (sel === '2:2') return { values: filas[1] ? [filas[1]] : [] };
       const m = sel.match(/^([A-Z]+):([A-Z]+)$/);
       return { values: columna(filas, idx(m[1])) };
     }) });
@@ -58,6 +59,7 @@ global.fetch = async (url, op = {}) => {
   const filas = n => [['Actualizado: …'], ['RBD', 'Respuestas', '%']].concat(Array.from({ length: n }, (_, i) => [10000 + i, i, 0.5]));
   await seg.escribir({ Resumen: filas(3), 'Por curso': filas(1500) });
   const crear = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
+  Object.values(hojas).forEach(x => { if (!x.props.gridProperties) x.props.gridProperties = {}; });
   const add = crear.cuerpo.requests.filter(q => q.addSheet);
   check('missing tabs created with frozen 2 rows and room for every row', add.length === 2 && add.every(q => q.addSheet.properties.gridProperties.frozenRowCount === 2)
     && add[1].addSheet.properties.gridProperties.rowCount >= 1502);
@@ -76,6 +78,20 @@ global.fetch = async (url, op = {}) => {
     && llamadas.findIndex(l => l.ruta.endsWith('values:batchUpdate')) < llamadas.indexOf(limpiar));
   check('second write: rows below and columns right of the new data cleared, within the grid', limpiar.cuerpo.ranges.includes("'Resumen'!A4:E103")
     && limpiar.cuerpo.ranges.includes("'Resumen'!D1:E3") && limpiar.cuerpo.ranges.includes("'Por curso'!A1503:E1602"));
+
+  // Header changes (columns move) → number formats set again so "%" follows its column; same header → untouched
+  const pctEn = (pedidos) => pedidos.filter(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat.numberFormat).map(q => q.repeatCell.range.startColumnIndex);
+  llamadas = [];
+  const movida = n => [['Actualizado: …'], ['RBD', 'Coordinador/a', 'Respuestas', '%']].concat(Array.from({ length: n }, (_, i) => [10000 + i, '', i, 0.5]));
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
+  const ref = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
+  const enResumen = ref && ref.cuerpo.requests.filter(q => q.repeatCell && q.repeatCell.range.sheetId === hojas.Resumen.props.sheetId);
+  check('header changed: % format moves to the new "%" column, the old one back to automatic; unchanged tab untouched', !!ref
+    && JSON.stringify(pctEn(enResumen)) === '[3]' && enResumen.some(q => q.repeatCell.range.startColumnIndex === 2 && !q.repeatCell.cell.userEnteredFormat.numberFormat)
+    && !ref.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.range.sheetId === hojas['Por curso'].props.sheetId));
+  llamadas = [];
+  await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
+  check('same header again: no formatting request', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));
 
   // Grid too small for a bigger write → rows appended first
   llamadas = [];

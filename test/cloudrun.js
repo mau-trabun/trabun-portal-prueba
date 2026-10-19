@@ -140,7 +140,7 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   const sinEstado = t => Object.keys(t).map(k => t[k].slice(1));
   check('tracker written after a snapshot, rows identical to Code.js on Apps Script (2 tabs)', escritos.length === 1
     && Object.keys(escritos[0]).join() === 'Resumen,Por curso' && JSON.stringify(sinEstado(escritos[0])) === JSON.stringify(sinEstado(esperado)));
-  check('tracker carries the email date (read from its Date cell)', escritos[0].Resumen.find(r => r[0] === 11111)[7] === '09-10-2026');
+  check('tracker carries the email date (read from its Date cell)', escritos[0].Resumen.find(r => r[0] === 11111)[escritos[0].Resumen[1].indexOf('Correo enviado')] === '09-10-2026');
   await post(casos[0]);
   await new Promise(r => setTimeout(r, 10));
   check('a login does not write the tracker (only snapshots do)', escritos.length === 1);

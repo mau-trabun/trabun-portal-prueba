@@ -78,12 +78,17 @@ function letra(n) {
 
 // The team tracker (a separate Sheet, shared with the service account as editor). Each write replaces every tab's
 // values in place (no flash of an empty tab), then clears what is left of a longer previous version.
-// A missing tab is created with the header row frozen and bold and "%" columns as percentages; after that the
-// team's own formatting is kept (only values are written).
+// A missing tab is created with the header row frozen and bold and "%" columns as percentages. When the header
+// (row 2) changes, number formats are set again so a "%" never lands on a count; otherwise the team's own
+// formatting is kept (only values are written).
 function crearSeguimiento(id) {
   const base = 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(id);
   const rango = t => "'" + t.replace(/'/g, "''") + "'";
   const post = (ruta, cuerpo) => api(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  // Header bold; data rows: "%" columns as percent, every other column back to automatic
+  const formatos = (sheetId, encabezado) => [{ repeatCell: { range: { sheetId, startRowIndex: 1, endRowIndex: 2 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } }]
+    .concat(encabezado.map((t, j) => ({ repeatCell: { range: { sheetId, startRowIndex: 2, startColumnIndex: j, endColumnIndex: j + 1 },
+      cell: { userEnteredFormat: t === '%' ? { numberFormat: { type: 'PERCENT', pattern: '0%' } } : {} }, fields: 'userEnteredFormat.numberFormat' } })));
   return {
     async escribir(tabs) {
       const meta = await api(base + '?fields=sheets.properties(title,sheetId,gridProperties)');
@@ -92,6 +97,12 @@ function crearSeguimiento(id) {
       const usados = new Set(meta.sheets.map(s => s.properties.sheetId));
       const pedidos = [];
       const nombres = Object.keys(tabs);
+      const existentes = nombres.filter(n => hojas[n]);
+      const actuales = {}; // current header (row 2) of each existing tab
+      if (existentes.length) {
+        const j = await api(base + '/values:batchGet?' + new URLSearchParams(existentes.map(n => ['ranges', rango(n) + '!2:2'])));
+        existentes.forEach((n, i) => { actuales[n] = ((j.valueRanges[i].values || [])[0] || []).map(String); });
+      }
       nombres.forEach(n => {
         const filas = tabs[n], alto = filas.length, ancho = filas.reduce((m, r) => Math.max(m, r.length), 1);
         const h = hojas[n];
@@ -100,15 +111,13 @@ function crearSeguimiento(id) {
           do { sheetId = 1 + Math.floor(Math.random() * 2e9); } while (usados.has(sheetId));
           usados.add(sheetId);
           pedidos.push({ addSheet: { properties: { sheetId, title: n, gridProperties: { rowCount: alto + 100, columnCount: ancho + 2, frozenRowCount: 2 } } } });
-          pedidos.push({ repeatCell: { range: { sheetId, startRowIndex: 1, endRowIndex: 2 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } });
-          (filas[1] || []).forEach((t, j) => {
-            if (t === '%') pedidos.push({ repeatCell: { range: { sheetId, startRowIndex: 2, startColumnIndex: j, endColumnIndex: j + 1 }, cell: { userEnteredFormat: { numberFormat: { type: 'PERCENT', pattern: '0%' } } }, fields: 'userEnteredFormat.numberFormat' } });
-          });
+          pedidos.push(...formatos(sheetId, filas[1] || []));
           hojas[n] = { gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } };
         } else {
           const g = h.gridProperties || {};
           if ((g.rowCount || 0) < alto) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'ROWS', length: alto - (g.rowCount || 0) + 100 } });
           if ((g.columnCount || 0) < ancho) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'COLUMNS', length: ancho - (g.columnCount || 0) + 2 } });
+          if ((filas[1] || []).join('\u0001') !== actuales[n].join('\u0001')) pedidos.push(...formatos(h.sheetId, filas[1] || []));
         }
       });
       if (pedidos.length) await post(':batchUpdate', { requests: pedidos });

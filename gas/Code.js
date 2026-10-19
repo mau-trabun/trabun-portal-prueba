@@ -580,9 +580,9 @@ const SEG_TABS = { resumen: 'Resumen', cursos: 'Por curso' };
 const SEG_HORARIO = { desde: 8, hasta: 18 };
 const SEG_ACCIONES = { test_copiar_link: 'link', test_copiar_mensaje: 'mensaje', test_whatsapp: 'WhatsApp', test_qr: 'QR',
   test_instructivo: 'instructivo', test_copiar_lista: 'lista por curso', test_whatsapp_lista: 'lista por curso' };
-const SEG_RESUMEN = ['RBD', 'Colegio', 'Comuna', 'Programa', 'Modelo', 'EDI', 'Jefe/a de Proyecto', 'Correo enviado',
+const SEG_RESUMEN = ['RBD', 'Colegio', 'Programa', 'Modelo', 'EDI', 'Jefe/a de Proyecto', 'Coordinador/a', 'Correo enviado',
   'Ingresos al portal', 'Último ingreso', 'Compartió el Test', 'Respuestas', 'Estimado', '%', 'Cursos sin respuestas'];
-const SEG_CURSOS = ['RBD', 'Colegio', 'Programa', 'Modelo', 'Jefe/a de Proyecto', 'Nivel', 'Curso', 'Respuestas', 'Estimado', '%', 'Registrado'];
+const SEG_CURSOS = ['RBD', 'Colegio', 'Programa', 'Modelo', 'Jefe/a de Proyecto', 'Coordinador/a', 'Nivel', 'Curso', 'Respuestas', 'Estimado', '%', 'Registrado'];
 
 // Extra sources, each optional (missing tab or header → blank columns). Cloud Run reads only RBD + Enviado of Correos Test.
 function datosSeguimiento_() {
@@ -646,7 +646,8 @@ function seguimiento_(d, s, reloj) {
   const prog = p => (p.programa === 'ase' ? 'ASE' : 'REL');
   const estado = 'Actualizado: ' + fecha(ms_(reloj.generado), true) + ` · se reescribe sola: cada 2 minutos de ${SEG_HORARIO.desde}:00 a `
     + `${SEG_HORARIO.hasta}:00, y una vez por hora el resto del día. No edites aquí (usa vistas de filtro).`;
-  const resumen = [[estado], SEG_RESUMEN.concat(columnas.map(i => NIVELES[i]))];
+  // Two numeric columns per grade (responses, estimate) so the team can add them up
+  const resumen = [[estado], SEG_RESUMEN.concat([].concat.apply([], columnas.map(i => [NIVELES[i] + ' resp.', NIVELES[i] + ' est.'])))];
   const cursos = [[estado], SEG_CURSOS.slice()];
   filas.forEach(f => {
     const { t, p } = f;
@@ -656,17 +657,18 @@ function seguimiento_(d, s, reloj) {
       if (reg.length) reg.filter(c => !c.r).forEach(c => pendientes.push(corto(n.nivel) + c.letra));
       else if (!n.r) pendientes.push(n.nivel);
     });
-    const celda = i => {
+    // [resp., est.]: text only where there is no number (SUM ignores it)
+    const celdas = i => {
       const n = t.niveles.find(x => x.nivel === NIVELES[i]);
-      if (n) return !n.registrado ? n.r + ' · fuera de lo registrado' : n.est ? n.r + ' / ~' + n.est : String(n.r);
-      return t.nivelesPapel.indexOf(NIVELES[i]) >= 0 ? 'Papel' : '';
+      if (n) return [n.r, !n.registrado ? 'Fuera de lo registrado' : n.est || ''];
+      return [t.nivelesPapel.indexOf(NIVELES[i]) >= 0 ? 'Papel' : '', ''];
     };
-    resumen.push([Number(f.rbd), f.col.nombre || '', f.col.comuna || '', prog(p), p.modelo || '', p.edi ? 'SÍ' : '', p.jefeProyecto || '',
+    resumen.push([Number(f.rbd), f.col.nombre || '', prog(p), p.modelo || '', p.edi ? 'SÍ' : '', p.jefeProyecto || '', p.coordinador || '',
       fecha(s.enviados[f.rbd], false), f.u.ingresos, fecha(f.u.ultimo, true),
       f.u.acciones[p.programa].join(', '), t.resumen.r, t.resumen.est || '', pct(t.resumen.rConEst, t.resumen.est),
-      pendientes.join(', ')].concat(columnas.map(celda)));
+      pendientes.join(', ')].concat([].concat.apply([], columnas.map(celdas))));
     t.niveles.forEach(n => n.cursos.forEach(c => {
-      cursos.push([Number(f.rbd), f.col.nombre || '', prog(p), p.modelo || '', p.jefeProyecto || '', n.nivel,
+      cursos.push([Number(f.rbd), f.col.nombre || '', prog(p), p.modelo || '', p.jefeProyecto || '', p.coordinador || '', n.nivel,
         c.letra ? corto(n.nivel) + ' ' + c.letra : 'Sin letra', c.r, c.est || '', pct(c.r, c.est),
         n.registrado && c.registrado ? 'Sí' : 'Fuera de lo registrado']);
     }));
