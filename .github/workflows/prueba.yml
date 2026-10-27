@@ -1,0 +1,36 @@
+# Test portal: publishes docs/ to GitHub Pages only in the mau-trabun/trabun-portal-prueba repo
+# (git push prueba HEAD:main). In this repo the job is skipped: its Pages are served from main /docs.
+name: Portal de prueba
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  publicar:
+    if: github.repository == 'mau-trabun/trabun-portal-prueba'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      # No CNAME: the domain belongs to the real portal. noindex + a visible tag so it is never mistaken for it.
+      - name: Marcar como prueba
+        run: |
+          rm -f docs/CNAME
+          sed -i 's#</head>#<meta name="robots" content="noindex"><style>@media print{.tag-prueba{display:none}}</style></head>#' docs/index.html docs/t/index.html
+          sed -i 's#<title>#<title>PRUEBA · #' docs/index.html docs/t/index.html
+          sed -i 's#<body>#<body><div class="tag-prueba" style="position:fixed;left:12px;bottom:12px;z-index:9999;pointer-events:none;background:\#151b29;color:\#fff;font:700 12px/1 Mulish,system-ui,sans-serif;letter-spacing:.06em;padding:8px 12px;border-radius:999px;opacity:.85">PORTAL DE PRUEBA · DATOS FICTICIOS</div>#' docs/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: pages
+        uses: actions/deploy-pages@v4

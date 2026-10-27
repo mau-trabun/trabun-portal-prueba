@@ -2745,7 +2745,12 @@ window.qrcode=qrcode;
     // Portal de Seguimiento 2026 · Fundación Trabün
     // Data contract: CONTRACT.md. Everything respondent-controlled goes through esc().
 
-    const API_URL = "https://portal-api-staging-975999694722.southamerica-west1.run.app/"; // staging (Cloud Run)
+    // Only the domain talks to the live service (portal-api-staging, the one schools use). Anywhere else (localhost,
+    // the test portal on github.io) talks to portal-api-prueba: copy of the Sheet with fake rows.
+    const EN_PORTAL = location.hostname === "portal.fundaciontrabun.cl";
+    const API_URL = EN_PORTAL
+      ? "https://portal-api-staging-975999694722.southamerica-west1.run.app/"
+      : "https://portal-api-prueba-975999694722.southamerica-west1.run.app/";
     // Apps Script staging /exec, kept as fallback: https://script.google.com/macros/s/AKfycbyFDY66nTGtuUhG6XOrXa4w_ct1EY5zAQnSOg6Ar-Egofle4K2nDVqFrSl7ovSj1OPyRg/exec
     const REINTENTOS = 2; // Google's result URL fails intermittently (~20%): retry when the reply isn't JSON
     const TIEMPO_MAX_MS = 40000; // per attempt; Apps Script cold starts take several seconds
@@ -3082,7 +3087,7 @@ window.qrcode=qrcode;
     function urlCorta(l) {
       const rbd = (estado.datos.colegio || {}).rbd;
       // "-" instead of "_": an underlined link (PDF viewer, WhatsApp, mail) hides "_"; the backend ignores separators
-      return l.form && rbd ? `${location.origin}/t/?${rbd}-${encodeURIComponent(l.form.replace(/_/g, "-"))}` : l.link;
+      return l.form && rbd ? `${new URL("t/", location.href).href}?${rbd}-${encodeURIComponent(l.form.replace(/_/g, "-"))}` : l.link;
     }
     function textoLink(l, clave) {
       return (clave === "test" ? urlCorta(l) : l.link).replace(/^https?:\/\//, "");

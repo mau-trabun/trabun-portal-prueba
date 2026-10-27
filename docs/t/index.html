@@ -22,8 +22,10 @@
   <main><div class="caja"><h1 id="titulo">Abriendo el test…</h1><p id="texto">Un momento, por favor.</p></div></main>
   <script>
     // Short Test link "/t/?<RBD>-<Form>" (shown as text in the portal and the instructivo): asks the backend for the
-    // school's full SurveyMonkey link and opens it. Same backend as the portal: change both API_URL at the prod switch.
-    const API_URL = "https://portal-api-staging-975999694722.southamerica-west1.run.app/"; // staging (Cloud Run)
+    // school's full SurveyMonkey link and opens it. Same backend rule as the portal (docs/index.html): change both together.
+    const API_URL = location.hostname === "portal.fundaciontrabun.cl"
+      ? "https://portal-api-staging-975999694722.southamerica-west1.run.app/"
+      : "https://portal-api-prueba-975999694722.southamerica-west1.run.app/";
 
     function noValido() {
       document.getElementById("titulo").textContent = "Este link no está completo";
