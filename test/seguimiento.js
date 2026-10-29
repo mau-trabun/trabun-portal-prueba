@@ -10,9 +10,10 @@ const reloj = { hoy: '2026-10-19', generado: '2026-10-19T14:32:00-03:00' };
 check('no Correos Test, empty Métricas: blank extras, no error', (() => { const s = ctx.datosSeguimiento_(); return JSON.stringify(s.enviados) === '{}' && s.metricas.length === 0; })());
 
 sheets['Correos Test'] = [['RBD', 'Colegio', 'Para', 'Enviar', 'Enviado'],
-  ['11111', 'x', 'a@ejemplo.invalid', true, new Date(2026, 9, 9, 10, 15)], ['22222', 'x', 'b@ejemplo.invalid', true, '']];
+  ['11111', 'x', 'a@ejemplo.invalid', true, new Date(2026, 9, 9, 10, 15)], ['22222', 'x', 'b@ejemplo.invalid', true, 46303.5]]; // date cell without date format
 sheets['Métricas'].push(
   [new Date(2026, 9, 14, 9, 0), 11111, 'ASE,REL', true, true, 'login'],
+  [46309.875, 22222, 'ASE', true, true, 'login'],                      // date cell without date format: serial 14-10-2026 21:00
   ['2026-10-16 18:45:00', 11111, 'ASE,REL', true, true, 'login'],          // Cloud Run writes text timestamps
   [new Date(2026, 9, 16, 18, 46), 11111, 'ASE', '', '', 'test_whatsapp'],
   [new Date(2026, 9, 16, 18, 47), 11111, 'ASE', '', '', 'test_instructivo'],
@@ -50,8 +51,9 @@ check('EDI paper grades shown as "Papel"', f.EDI === 'SÍ' && f['5° básico res
   && f['8° básico resp.'] === 1 && f['8° básico est.'] === 'Fuera de lo registrado' && f['4° básico resp.'] === 0 && f['4° básico est.'] === 40);
 check('Cursos sin respuestas: registered classes with 0 (short labels), not unregistered ones',
   a['Cursos sin respuestas'] === '5°A, 5°B, 6°A, 7°A, 7°B, 8°A, 8°B' && !/4°/.test(a['Cursos sin respuestas']));
-check('Correo enviado: date only, blank when not sent or no row', a['Correo enviado'] === '09-10-2026' && rl['Correo enviado'] === '09-10-2026' && f['Correo enviado'] === '');
-check('portal use: logins per school (Date and text timestamps), latest one', a['Ingresos al portal'] === 2 && a['Último ingreso'] === '16-10-2026 18:45' && f['Ingresos al portal'] === 0 && f['Último ingreso'] === '');
+check('Correo enviado: date only, also when stored as a plain number (serial)', a['Correo enviado'] === '09-10-2026' && rl['Correo enviado'] === '09-10-2026' && f['Correo enviado'] === '08-10-2026');
+check('portal use: logins per school (Date and text timestamps), latest one', a['Ingresos al portal'] === 2 && a['Último ingreso'] === '16-10-2026 18:45');
+check('portal use: a timestamp stored as a plain number (serial) still reads as its date', f['Ingresos al portal'] === 1 && f['Último ingreso'] === '14-10-2026 21:00');
 check('Test share actions per program, deduplicated; EFA and ver_efa left out',
   a['Compartió el Test'] === 'WhatsApp, instructivo' && rl['Compartió el Test'] === 'lista por curso' && f['Compartió el Test'] === '');
 check('Por curso: one row per class with count, per-class estimate and %, flags', (() => {

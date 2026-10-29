@@ -130,6 +130,7 @@ A Google Sheet outside the 2026 Sheet (which holds claves and emails), shared wi
 - **List number:** a whole number from 1 to 99, otherwise `null` (a typo like 999 would otherwise draw a 999-cell grid).
 - **Email:** trim and lowercase. Never leaves the server.
 - **Names:** trim and collapse spaces only. Case is fixed at render time (`formatNombre`).
+- **Dates** (`ms_()`): a Date cell, ISO-like text, or **a plain number read as a Sheets date serial** (a date cell that lost its date format; 20.000–100.000 only). Seen 19-10-2026: `Métricas` rows 07-10 → 16-10 held their timestamps as plain numbers, so the tracker showed no "Último ingreso" for 80 of 106 school-programs with logins.
 
 ## 3. Derivation rules
 - **Implemented grade:** `CxN > 0` or `Alumnos > 0`. Treated as a set (gaps allowed).

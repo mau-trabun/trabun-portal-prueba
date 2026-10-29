@@ -621,11 +621,9 @@ function seguimiento_(d, s, reloj) {
       u.acciones[m.programa].push(SEG_ACCIONES[m.evento]);
     }
   });
-  const fecha = (v, conHora) => {
-    const ms = typeof v === 'number' ? v : ms_(v);
-    if (ms == null) return v === '' || v == null ? '' : String(v);
-    return Utilities.formatDate(new Date(ms), TZ, conHora ? 'dd-MM-yyyy HH:mm' : 'dd-MM-yyyy');
-  };
+  const conFormato = (ms, conHora) => (ms == null ? '' : Utilities.formatDate(new Date(ms), TZ, conHora ? 'dd-MM-yyyy HH:mm' : 'dd-MM-yyyy'));
+  // A cell value (Date, serial number or text): a date if it reads as one, otherwise the text as is
+  const fecha = (v, conHora) => { const ms = ms_(v); return ms != null ? conFormato(ms, conHora) : v === '' || v == null ? '' : String(v); };
   const corto = n => n.split(' ')[0]; // "7° básico" → "7°", "I° medio" → "I°"
   const pct = (r, est) => (est ? Math.round(r / est * 1000) / 1000 : '');
   const miles = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -653,7 +651,7 @@ function seguimiento_(d, s, reloj) {
   const columnas = Object.keys(vistos).map(Number).sort((a, b) => a - b);
 
   const prog = p => (p.programa === 'ase' ? 'ASE' : 'REL');
-  const estado = [['Actualizado: ' + fecha(ms_(reloj.generado), true)],
+  const estado = [['Actualizado: ' + conFormato(ms_(reloj.generado), true)],
     [`Actualización automática cada 2 minutos de ${SEG_HORARIO.desde}:00 a ${SEG_HORARIO.hasta}:00, y una vez por hora el resto del día.`]];
   // Two numeric columns per grade (responses, estimate) so the team can add them up
   const resumen = estado.concat([SEG_RESUMEN.concat([].concat.apply([], columnas.map(i => [NIVELES[i] + ' resp.', NIVELES[i] + ' est.'])))]);
@@ -688,7 +686,7 @@ function seguimiento_(d, s, reloj) {
       return [t.nivelesPapel.indexOf(NIVELES[i]) >= 0 ? 'Papel' : '', ''];
     };
     resumen.push([Number(f.rbd), f.col.nombre || '', prog(p), p.modelo || '', p.edi ? 'SÍ' : '', p.jefeProyecto || '', p.coordinador || '',
-      fecha(s.enviados[f.rbd], false), f.u.ingresos, fecha(f.u.ultimo, true),
+      fecha(s.enviados[f.rbd], false), f.u.ingresos, conFormato(f.u.ultimo, true),
       f.u.acciones[p.programa].join(', '), t.resumen.r, t.resumen.est || '', pct(t.resumen.rConEst, t.resumen.est),
       pendientes.join(', ')].concat([].concat.apply([], columnas.map(celdas))));
     t.niveles.forEach(n => n.cursos.forEach(c => {
@@ -787,10 +785,20 @@ function esVerdadero_(v) {
   return v === true || /^(true|verdadero|si|1)$/.test(normTexto_(v));
 }
 
+// A plain number is a Sheets date serial: a date cell that lost its date format reads as one
+// (Métricas rows 07-10 → 16-10-2026 did). Only years ~1955–2173 qualify, so a stray small number is never a date.
 function ms_(v) {
   if (v instanceof Date) return isNaN(v.getTime()) ? null : v.getTime();
+  if (typeof v === 'number') return v > 20000 && v < 100000 ? fechaSerial_(v).getTime() : null;
   const t = Date.parse(String(v == null ? '' : v).trim());
   return isNaN(t) ? null : t;
+}
+
+// Sheets serial (days since 30-12-1899, in the Sheet's local time) → Date in the script's time zone
+function fechaSerial_(s) {
+  const dias = Math.floor(s), seg = Math.round((s - dias) * 86400);
+  const b = new Date(Date.UTC(1899, 11, 30) + dias * 86400000);
+  return new Date(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate(), Math.floor(seg / 3600), Math.floor((seg % 3600) / 60), seg % 60);
 }
 
 function fechaIso_(v) {
