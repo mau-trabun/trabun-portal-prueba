@@ -3257,7 +3257,7 @@ window.qrcode=qrcode;
         return intro + enlaces + papel + (avance ? `\n\nAsí vamos por nivel:\n${avance}` : "") + dia + "\n\n¡Muchas gracias por su apoyo!";
       }
       // Whoever gets it is who answers: tell them what the first page shows, so they know it's the right survey (Mau 29-10-2026)
-      const verifica = efaDelLink(links) ? `\n\nAl abrirla verás «Estás respondiendo por: ${efaDelLink(links)}»; si no es tu colegio, no la respondas y avísame.` : "";
+      const verifica = efaDelLink(links) ? `\n\nAl abrirla verás «Estás respondiendo por: ${efaDelLink(links)}». Si no aparece el nombre de nuestro colegio, o aparece otro, no la respondas y avísame.` : "";
       // EDI treated schools (Mau 29-10-2026): the survey takes up to 20 min (consent, RUT…) and is part of the impact study
       const estudio = ESTUDIO_EDI[prog.edi ? prog.cohorte : null];
       const duracion = estudio ? "Toma unos 20 minutos" : "Solo toma unos minutos";
