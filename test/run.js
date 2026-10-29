@@ -181,6 +181,20 @@ check('2026 EFA role options → section + short label (REL, ASE, EDI wordings; 
   ['Equipo Directivo / Convivencia Escolar.', 'direccion', 'Equipo Directivo / Convivencia Escolar'],
   ['Algo nuevo, con coma', 'lideres', 'Algo nuevo'],
 ].every(([t, sec, corto]) => { const r = ctx.rolEfa_(t); return r.secciones.join('+') === sec && r.corto === corto; }));
+check('EFA order inside a section: by role (org chart), then by surname; docentes before "todos los roles" in Docentes', (() => {
+  const mk = (nombres, apellidos, rol, i) => Object.assign({ fila: i, correo: 'p' + i + '@x.cl', fecha: i, nombre: nombres + ' ' + apellidos, nombres, apellidos, rol, niveles: [] }, (r => ({ rolCorto: r.corto, secciones: r.secciones }))(ctx.rolEfa_(rol)));
+  const b = ctx.bloqueEfa_({ programa: 'rel', implementados: [], cxn: [] }, [
+    mk('Ana', 'Zúñiga', 'Otro/a líder del establecimiento (UTP, coordinador/a u otros)', 1),
+    mk('Beatriz', 'Soto', 'Mentor/a, es decir, acompaño', 2),
+    mk('Carlos', 'Álvarez', 'Cumplo todos los roles: Encargado/a, Mentor/a y Docente', 3),
+    mk('Diego', 'Pérez', 'Encargado/a del Programa, es decir…', 4),
+    mk('Elena', 'Muñoz', 'Mentor/a, es decir, acompaño', 5),
+    mk('Felipe', 'Bravo', 'Docente que implementa el Programa de Religión de Trabün', 6),
+    mk('Gloria', 'Castro', 'Cumplo ambos roles, es decir, soy Encargado/a y Mentor/a del Programa', 7),
+    mk('Hugo', 'Zamora', 'Docente que implementa el Programa de Religión de Trabün', 8)]);
+  const nombres = id => b.secciones.find(x => x.id === id).personas.map(x => x.nombre.split(' ')[1]).join(',');
+  return nombres('lideres') === 'Pérez,Muñoz,Soto,Castro,Álvarez,Zúñiga' && nombres('docentes') === 'Bravo,Zamora,Álvarez';
+})());
 sheets['Respuestas EFA'].push(['REL Consolidado','2026-11-03T16:00:00','Tomás','Vega','tv@ejemplo.cl',AROMOS,'Cumplo todos los roles: Encargado/a, Mentor/a y Docente','-']);  // the survey asks them no grades
 const relTodos = ctx.panel_('11111', ctx.cargarDatos_(), ctx.reloj_()).programas.find(p => p.programa === 'rel').efa;
 check('"Cumplo todos los roles": listed in Líderes and in Docentes (no grades: not asked), counted once in the total',

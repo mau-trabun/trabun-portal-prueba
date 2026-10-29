@@ -312,6 +312,8 @@ function leerRespuestasEfa_(formularios) {
         fecha: ms_(primero_(r, c.fecha)),
         correo: String(primero_(r, c.correo)).trim().toLowerCase(),
         nombre: limpio_([primero_(r, c.nombre), primero_(r, c.apellido)].join(' ')),
+        nombres: limpio_(primero_(r, c.nombre)),     // sort keys only (the payload carries the full name)
+        apellidos: limpio_(primero_(r, c.apellido)),
         rol,
         rolCorto: rolEfa_(rol).corto,
         secciones: rolEfa_(rol).secciones,
@@ -521,7 +523,7 @@ function bloqueEfa_(p, resps) {
   const porSeccion = {};
   vigentes.forEach(x => x.secciones.forEach(id => (porSeccion[id] || (porSeccion[id] = [])).push(x)));
   const persona = x => ({ nombre: x.nombre, rol: x.rolCorto });
-  const ordenadas = id => (porSeccion[id] || []).slice().sort(porNombre_);
+  const ordenadas = id => (porSeccion[id] || []).slice().sort((a, b) => rangoRol_(id, a.rolCorto) - rangoRol_(id, b.rolCorto) || porApellido_(a, b));
 
   const secciones = SECCIONES.map(id => {
     const s = { id, r: (porSeccion[id] || []).length };
@@ -579,6 +581,16 @@ const ROLES_EFA = [
   ['profesor', ['docentes'], 'Docente'],
   ['otro/a lider', ['lideres'], 'Otro/a líder'],
 ];
+// Order inside a section (Mau 29-10-2026): by role like an org chart, then by surname. In Docentes the plain docentes
+// come first; "Encargado/a, Mentor/a y Docente" after them. Unknown roles last.
+const ORDEN_ROLES = ['Director/a', 'Equipo Directivo / Convivencia Escolar', 'Encargado/a', 'Mentor/a', 'Encargado/a y Mentor/a',
+  'Encargado/a, Mentor/a y Docente', 'Otro/a líder', 'Docente'];
+function rangoRol_(seccion, corto) {
+  if (seccion === 'docentes') return corto === 'Docente' ? 0 : 1;
+  const i = ORDEN_ROLES.indexOf(corto);
+  return i < 0 ? ORDEN_ROLES.length : i;
+}
+
 function rolEfa_(rol) {
   const n = normTexto_(rol).replace(/^soy /, '');
   const r = ROLES_EFA.find(x => n.startsWith(x[0]));
@@ -891,10 +903,6 @@ function compararTexto_(a, b) {
 
 function porApellido_(a, b) {
   return compararTexto_(a.apellidos, b.apellidos) || compararTexto_(a.nombres, b.nombres);
-}
-
-function porNombre_(a, b) {
-  return compararTexto_(a.nombre, b.nombre);
 }
 
 // ── Manual checks (run from the editor) ─────────────────────
