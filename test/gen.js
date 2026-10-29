@@ -61,5 +61,7 @@ check('2026 role options used; EDI wording only in EDI schools; "todos los roles
 })());
 check('no EFA rows for programs without an EFA link (excluded groups)', !e.slice(1).some(r => /93333/.test(r.join('|'))));
 check('new cases chosen: SIP exception, REL without Test', informe.includes('SIP con EFA (excepción): RBD 91111') && informe.includes('Religión sin Test, con EFA (solo 1° a 4° básico): RBD 92222'));
+check('schools without a Test grade get no student rows (their Test tab stays empty, EFA only)', ['77777', '92222'].every(rbd => {
+  const r = post({ rbd, clave: claves[rbd] }); return r.programas.every(p => !p.test.niveles.length && p.efa.total > 0); }));
 console.log(ctx.revisarFormularios());
 `);

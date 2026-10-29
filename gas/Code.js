@@ -1619,7 +1619,7 @@ function generarDatosPrueba() {
     ['ASE EDI cohorte 2026', ps => ps.some(p => p.programa === 'ase' && p.edi && p.anioInicio === 2026)],
     ['SIP con EFA (excepción)', (ps, col) => /sociedad de instruccion primaria/.test(normTexto_(col.sostenedor)) && ps.some(conEfa)],
     ['Religión sin Test, con EFA (solo 1° a 4° básico)', ps => ps.some(p => p.programa === 'rel' && !conTest(p) && conEfa(p))],
-    ['Sin niveles con Test (uso diagnóstico)', ps => ps.some(p => !conTest(p))],
+    ['Sin niveles con Test (sin respuestas de estudiantes)', ps => ps.some(p => !conTest(p))],
     ['ASE + Religión', ps => ps.length === 2 && ps.every(conTest)],
     ['Religión sola', ps => ps.length === 1 && ps[0].programa === 'rel' && conTest(ps[0])],
     ['ASE sin EDI', ps => ps.length === 1 && ps[0].programa === 'ase' && !ps[0].edi && conTest(ps[0])],
@@ -1659,7 +1659,7 @@ function fakeTest_(p, colegioTxt, forms, testIdx, rnd, conBordes) {
   const formsTest = formulariosDe_(forms, 'test', p);
   const formDe = i => (formsTest.find(f => rango_(f).indexOf(i) >= 0) || formsTest[0] || {}).form;
   let niveles = p.implementados.filter(i => testIdx.indexOf(i) >= 0);
-  if (!niveles.length && testIdx.length) niveles = [testIdx[0]]; // diagnostic use: a grade the school doesn't implement
+  // No Test grade → no student responses: since 07-10-2026 those schools see no Test links (Mau 29-10-2026)
   const out = [];
   niveles.forEach(i => {
     const nCursos = Math.max(1, p.cxn[i]);
