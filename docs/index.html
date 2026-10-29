@@ -3031,15 +3031,17 @@ window.qrcode=qrcode;
     // EFA tab hidden until the program has a link or a response (links may arrive after the Test opens)
     const tieneEfa = prog => (prog.efa.links || []).some(l => esLinkValido(l.link)) || prog.efa.total > 0;
     // Test tab with nothing in it (no online or paper grade, no response, no link: e.g. REL only in 1°–4° básico).
-    // Hidden when the card has EFA (Mau 29-10-2026: those schools never got the Test email and come in for EFA);
-    // a card without EFA keeps it, so it is never left without tabs. A load error is not "empty".
+    // Hidden when the card has EFA and no program of the school has Test (Mau 29-10-2026: those schools never got the
+    // Test email and come in for EFA). In a mixed school (ASE with Test, REL without) it stays, with its "no hay
+    // niveles" line, so both cards keep the same tabs in sync. A card without EFA keeps it. A load error is not "empty".
     const testVacio = prog => prog.test.ok && !(prog.test.niveles || []).length && !(prog.test.nivelesPapel || []).length
       && !linksVisibles(prog, "test").length;
 
     function tarjetaPrograma(prog) {
       const meta = PROGRAMAS[prog.programa];
       const mostrarEfa = tieneEfa(prog);
-      const mostrarTest = !(mostrarEfa && testVacio(prog));
+      const colegioSinTest = (estado.datos.programas || []).every(testVacio);
+      const mostrarTest = !(mostrarEfa && colegioSinTest);
       const clave = !mostrarEfa ? "test" : !mostrarTest ? "efa" : estado.encuesta;
       const ve = estado.datos.encuestas[clave] || {};
       const linea = etiquetaFase(ve);
