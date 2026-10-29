@@ -1745,10 +1745,12 @@ function fakeEfa_(p, colegioTxt, forms, rnd, conBordes) {
 }
 
 // Header-driven row: each Colegio value lands in one random region column.
+// Any header starting with "Colegio" ("Colegio", "Colegio (RBD)" of the SurveyMonkey import), as the readers do.
 function filaPorEncabezado_(headers, obj, rnd) {
-  const colegios = headers.map((h, i) => (h === 'Colegio' ? i : -1)).filter(i => i >= 0);
+  const esColegio = h => /^colegio/.test(normTexto_(h));
+  const colegios = headers.map((h, i) => (esColegio(h) ? i : -1)).filter(i => i >= 0);
   const destino = colegios[Math.floor(rnd() * colegios.length)];
-  return headers.map((h, i) => (h === 'Colegio' ? (i === destino ? obj.Colegio : '') : (obj[h] == null ? '' : obj[h])));
+  return headers.map((h, i) => (esColegio(h) ? (i === destino ? obj.Colegio : '') : (obj[h] == null ? '' : obj[h])));
 }
 
 function fechaFake_(rnd) {

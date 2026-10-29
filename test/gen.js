@@ -63,5 +63,6 @@ check('no EFA rows for programs without an EFA link (excluded groups)', !e.slice
 check('new cases chosen: SIP exception, REL without Test', informe.includes('SIP con EFA (excepción): RBD 91111') && informe.includes('Religión sin Test, con EFA (solo 1° a 4° básico): RBD 92222'));
 check('schools without a Test grade get no student rows (their Test tab stays empty, EFA only)', ['77777', '92222'].every(rbd => {
   const r = post({ rbd, clave: claves[rbd] }); return r.programas.every(p => !p.test.niveles.length && p.efa.total > 0); }));
+check('rows land in a "Colegio (RBD)" column too (SurveyMonkey import header)', JSON.stringify(ctx.filaPorEncabezado_(['Form', 'Nivel', 'Colegio (RBD)'], { Form: 'X', Nivel: '4° básico', Colegio: 'C - N - 1' }, () => 0)) === JSON.stringify(['X', '4° básico', 'C - N - 1']));
 console.log(ctx.revisarFormularios());
 `);
