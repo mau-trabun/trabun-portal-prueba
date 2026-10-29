@@ -108,4 +108,56 @@ sfFila(22222, 'ASE')[sheets['SF'][0].indexOf('Sostenedor')] = '';
 sheets['Correos Test'].find(x => x[0] === '22222')[11] = false;
 ctx.prepararCorreosTest();
 check('category change resets the default (no longer SIP → ticked again)', fila('22222').Enviar === true && !/SIP/.test(fila('22222').Observaciones));
+
+// ── EFA kickoff: same flow, own tab; clave repeated, "the same we sent on…" only where the Test email went out ──
+['Proyecto', 'Sostenedor'].forEach(h => { const i = sheets['SF'][0].indexOf(h); sheets['SF'].slice(1).forEach(r => { if (r[0]) r[i] = ''; }); });
+sheets['Correos Test'].find(x => x[0] === '11111')[12] = new Date(2026, 9, 9, 10, 30);
+sheets['Correos Test'].find(x => x[0] === '22222')[12] = '';
+const testAntes = JSON.stringify(sheets['Correos Test']);
+const infEfa = ctx.prepararCorreosEfa();
+const filaEfa = rbd => { const t = sheets['Correos EFA']; const h = t[0]; const r = t.find(x => x[0] === rbd); return r && Object.fromEntries(h.map((k, i) => [k, r[i]])); };
+const ea = filaEfa('11111'), ef = filaEfa('22222'), ec = filaEfa('33333');
+check('EFA: own tab, same header, Correos Test untouched', sheets['Correos EFA'][0].join('|') === sheets['Correos Test'][0].join('|') && JSON.stringify(sheets['Correos Test']) === testAntes && /^Correos EFA: 4 colegios/.test(infEfa));
+check('EFA: programs with an EFA link, subject, dates, who answers, encargado asked to share and remind', ea.Programas === 'ASE + REL' && ea.Enviar === true && ea.Asunto === 'Encuesta de Fin de Año 2026 · Colegio Los Aromos'
+  && ea.Mensaje.includes('Les escribimos de Fundación Trabün para contarles que la Encuesta de Fin de Año de los programas de Aprendizaje Socioemocional y Religión Católica estará disponible desde el lunes 2 de noviembre hasta el viernes 13 de noviembre. La responden directivos, líderes y docentes que participan en los programas.')
+  && ea.Mensaje.includes('Cada persona va a recibir la invitación en su correo') && ea.Mensaje.includes('les pedimos compartir el link con su equipo y recordarles que la respondan.')
+  && ea.Mensaje.includes('nunca sus respuestas'));
+check('EFA: Test email sent → "the same RBD and clave we sent on 9 de octubre", clave repeated', ea.Mensaje.includes('En el Portal de Seguimiento 2026, el mismo del Test de Estudiantes, van a encontrar:')
+  && ea.Mensaje.includes('Entren con el mismo RBD y clave que les enviamos el 9 de octubre:\\nRBD: 11111\\nClave: aaa111'));
+check('EFA: no Test email → plain "enter with these details", singular', ef.Mensaje.includes('Te escribimos') && ef.Mensaje.includes('Entra al portal con estos datos:\\nRBD: 22222\\nClave: bbb222')
+  && !ef.Mensaje.includes('el mismo del Test') && ef.Mensaje.includes('del programa de Aprendizaje Socioemocional') && ef.Mensaje.includes('participan en el programa.') && ef.Contacto === 'consultas_edi@fundaciontrabun.cl');
+check('EFA: Control left out with its own reason', ec.Enviar === false && ec.Programas === '' && ec.Observaciones.includes('Sin programas con link EFA'));
+enviados = [];
+ctx.enviarCorreoPruebaEfa();
+check('EFA prueba: [PRUEBA] samples to the runner only, html says who it would go to', enviados.length === 2 && enviados.every(e => e.to === 'yo@ejemplo.invalid' && /^\\[PRUEBA\\] Encuesta de Fin de Año 2026 · /.test(e.subject) && !e.cc && e.htmlBody.includes('Correo de prueba.')));
+enviados = [];
+const rEfa = ctx.enviarCorreosEfa();
+const envA = enviados.find(e => e.to === 'mj@ejemplo.invalid,pedro@ejemplo.invalid');
+check('EFA send: both schools, CC team, html with clave + both portal items, Enviado stamped in Correos EFA only', enviados.length === 2 && envA && envA.cc === 'jdp.x@ejemplo.invalid' && envA.htmlBody.includes('>aaa111</td>')
+  && envA.htmlBody.includes('El link de la encuesta') && envA.htmlBody.includes('Quiénes ya respondieron') && envA.htmlBody.includes('La Encuesta de Fin de Año') && !envA.htmlBody.includes('Los links del test')
+  && filaEfa('11111').Enviado instanceof Date && filaEfa('22222').Enviado instanceof Date && JSON.stringify(sheets['Correos Test']) === testAntes && /No quedan pendientes/.test(rEfa));
+check('EFA: re-run sends nothing; no emails or claves in logs', (() => { enviados = []; ctx.enviarCorreosEfa(); return enviados.length === 0; })() && !/@ejemplo\\.invalid|aaa111|bbb222/.test(logs.join('\\n')));
+check('EFA: a program without an EFA link is not announced', (() => { const f = sheets['Formularios'].find(r => r[1] === 'REL Consolidado'); const l = f[8]; f[8] = ''; delete sheets['Correos EFA']; ctx.prepararCorreosEfa(); f[8] = l; return filaEfa('11111').Programas === 'ASE' && !filaEfa('11111').Mensaje.includes('Religión'); })());
+check('EFA EDI cohort 2025: impact-study paragraph (singular), right after the intro; regular schools without it',
+  ef.Mensaje.includes('participan en el programa.\\n\\nTu colegio forma parte del Estudio de Impacto del programa. Después de dos años de implementación, esta encuesta y el Test de Estudiantes son el último hito del estudio, por eso tu opinión es tan valiosa. Te pedimos, por favor, que la respondas con calma y a conciencia.\\n\\nCada persona')
+  && !ea.Mensaje.includes('Estudio de Impacto'));
+check('EFA EDI cohort 2026 (plural): first-year wording; unknown cohort: no paragraph', (() => {
+  const res = ctx.panel_('22222', ctx.cargarDatos_(), ctx.reloj_()), dos = [{ email: 'a@b.cl', nombre: 'A' }, { email: 'c@d.cl', nombre: 'C' }];
+  const t26 = ctx.correoEfa_(res, res.programas, dos, 'k', '', 2026).texto, t24 = ctx.correoEfa_(res, res.programas, dos, 'k', '', 2024).texto;
+  return t26.includes('Su colegio forma parte del Estudio de Impacto del programa. En este primer año de implementación, esta encuesta y el Test de Estudiantes son una pieza clave del estudio, por eso su opinión es tan valiosa. Les pedimos, por favor, que la respondan con calma y a conciencia.')
+    && !t24.includes('Estudio de Impacto'); })());
+check('EFA: Bien Público and SIP announced like the rest (Test rules do not apply)', (() => {
+  const iP = sheets['SF'][0].indexOf('Proyecto'), iS = sheets['SF'][0].indexOf('Sostenedor');
+  sfFila(11111, 'Religión')[iP] = 'Bien Público'; sfFila(11111, 'ASE')[iP] = 'Bien Público'; sfFila(22222, 'ASE')[iS] = 'Sociedad De Instruccion Primaria De Santiago';
+  delete sheets['Correos EFA']; ctx.prepararCorreosEfa();
+  const ok = filaEfa('11111').Programas === 'ASE + REL' && filaEfa('11111').Enviar === true && filaEfa('22222').Enviar === true && !/SIP|Bien Público/.test(filaEfa('11111').Observaciones + filaEfa('22222').Observaciones);
+  sfFila(11111, 'Religión')[iP] = ''; sfFila(11111, 'ASE')[iP] = ''; sfFila(22222, 'ASE')[iS] = '';
+  return ok; })());
+check('EFA: "the same we sent you" only if every recipient got the Test email (an encargado changed → plain wording)', (() => {
+  const fila11 = sheets['Correos Test'].find(x => x[0] === '11111'), para = fila11[4];
+  fila11[4] = 'mj@ejemplo.invalid'; delete sheets['Correos EFA']; ctx.prepararCorreosEfa();
+  const cambio = filaEfa('11111').Mensaje;
+  fila11[4] = para; delete sheets['Correos EFA']; ctx.prepararCorreosEfa();
+  return cambio.includes('Entren al portal con estos datos:') && !cambio.includes('les enviamos el') && !cambio.includes('el mismo del Test')
+    && filaEfa('11111').Mensaje.includes('les enviamos el 9 de octubre'); })());
 `);

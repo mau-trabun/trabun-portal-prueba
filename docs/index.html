@@ -3026,15 +3026,21 @@ window.qrcode=qrcode;
 
     // EFA tab hidden until the program has a link or a response (links may arrive after the Test opens)
     const tieneEfa = prog => (prog.efa.links || []).some(l => esLinkValido(l.link)) || prog.efa.total > 0;
+    // Test tab with nothing in it (no online or paper grade, no response, no link: e.g. REL only in 1°–4° básico).
+    // Hidden when the card has EFA (Mau 29-10-2026: those schools never got the Test email and come in for EFA);
+    // a card without EFA keeps it, so it is never left without tabs. A load error is not "empty".
+    const testVacio = prog => prog.test.ok && !(prog.test.niveles || []).length && !(prog.test.nivelesPapel || []).length
+      && !linksVisibles(prog, "test").length;
 
     function tarjetaPrograma(prog) {
       const meta = PROGRAMAS[prog.programa];
       const mostrarEfa = tieneEfa(prog);
-      const clave = mostrarEfa ? estado.encuesta : "test";
+      const mostrarTest = !(mostrarEfa && testVacio(prog));
+      const clave = !mostrarEfa ? "test" : !mostrarTest ? "efa" : estado.encuesta;
       const ve = estado.datos.encuestas[clave] || {};
       const linea = etiquetaFase(ve);
       return `<article class="programa" style="--prog:${meta.color}">
-        <div class="pestanas" role="group" aria-label="Encuestas">${pestana(prog, "test", clave)}${mostrarEfa ? pestana(prog, "efa", clave) : ""}</div>
+        <div class="pestanas" role="group" aria-label="Encuestas">${mostrarTest ? pestana(prog, "test", clave) : ""}${mostrarEfa ? pestana(prog, "efa", clave) : ""}</div>
         <div class="tarjeta">
           <div class="banda">
             <svg class="destello" width="320" height="170" viewBox="0 0 320 170" aria-hidden="true"><defs><radialGradient id="destello-${prog.programa}" cx="100%" cy="0%" r="100%"><stop offset="0%" stop-color="#fff" stop-opacity="0.22"/><stop offset="50%" stop-color="#fff" stop-opacity="0.07"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><rect width="320" height="170" fill="url(#destello-${prog.programa})"/></svg>
@@ -3075,6 +3081,27 @@ window.qrcode=qrcode;
     const esLinkValido = u => /^https?:\/\/\S+$/i.test(u || "");
 
     // What the survey's first page shows ("Estás respondiendo por: …"): the link's colegio custom variable
+    // Note in the share section, Test and EFA alike (Mau 29-10-2026): personalized link, copy it as is, only inside the
+    // school, and what the survey's first page shows so they can check it. EFA's line also carries comuna and RBD.
+    function avisoPersonalizado(links, clave) {
+      const uno = links.length === 1;
+      const quien = clave === "test" ? "tus estudiantes" : "tu equipo";
+      const nombre = clave === "test" ? colegioDelLink(links) : efaDelLink(links);
+      const muestra = clave === "test" ? "el test mostrará en grande" : "la encuesta mostrará";
+      return `<p class="compartir-aviso"><b>${uno ? "Este link es personalizado" : "Estos links son personalizados"} para tu colegio:</b> así sabemos que las respuestas son de ${quien}. ${uno ? "Compártelo tal como está" : "Compártelos tal como están"} (lo más fácil es usar el botón Copiar) y solo dentro de tu comunidad escolar.${nombre ? ` Al ${uno ? "abrirlo" : "abrirlos"}, ${muestra} «Estás respondiendo por: ${esc(nombre)}»; si ves ese nombre, el link está bien.` : ""}</p>`;
+    }
+
+    // EFA survey line: "Colegio X, Comuna — RBD 1234", from the link's own variables (rbd, colegio, comuna)
+    function efaDelLink(links) {
+      for (const l of links) {
+        try {
+          const q = new URL(l.link).searchParams, col = q.get("colegio"), com = q.get("comuna"), rbd = q.get("rbd");
+          if (col) return `${col}${com ? ", " + com : ""}${rbd ? " — RBD " + rbd : ""}`;
+        } catch (_) { /* not a URL */ }
+      }
+      return "";
+    }
+
     function colegioDelLink(links) {
       for (const l of links) {
         try { const v = new URL(l.link).searchParams.get("colegio"); if (v) return v; } catch (_) { /* not a URL */ }
@@ -3082,15 +3109,16 @@ window.qrcode=qrcode;
       return "";
     }
 
-    // Short Test link, for anything people read (link row, instructivo, team message, class list): typeable,
-    // opens the full one via /t/. The Copiar button next to the link and the QR keep the full SurveyMonkey link.
-    function urlCorta(l) {
+    // Short link, for anything people read (link row, messages; Test also instructivo and class list): typeable, opens
+    // the full one via /t/ (Test) or /e/ (EFA, same logic: Mau 29-10-2026). The Copiar button next to the link and the
+    // QR keep the full SurveyMonkey link.
+    function urlCorta(l, clave = "test") {
       const rbd = (estado.datos.colegio || {}).rbd;
-      // "-" instead of "_": an underlined link (PDF viewer, WhatsApp, mail) hides "_"; the backend ignores separators
-      return l.form && rbd ? `${new URL("t/", location.href).href}?${rbd}-${encodeURIComponent(l.form.replace(/_/g, "-"))}` : l.link;
+      // "-" instead of "_" or spaces: an underlined link (PDF viewer, WhatsApp, mail) hides "_"; the backend ignores separators
+      return l.form && rbd ? `${new URL(clave === "efa" ? "e/" : "t/", location.href).href}?${rbd}-${encodeURIComponent(l.form.replace(/[_\s]+/g, "-"))}` : l.link;
     }
     function textoLink(l, clave) {
-      return (clave === "test" ? urlCorta(l) : l.link).replace(/^https?:\/\//, "");
+      return urlCorta(l, clave).replace(/^https?:\/\//, "");
     }
 
     // Links to show for a program × survey. Test: only forms whose grades touch the school's
@@ -3156,7 +3184,7 @@ window.qrcode=qrcode;
         <div>
           <div class="compartir-titulo"><span class="punto"></span>${links.length > 1 ? "Comparte los links" : "Comparte el link"}</div>
           <div class="compartir-sub">${clave === "test" ? "Para los docentes que aplicarán el test en clases." : "Para el equipo educativo del colegio."}</div>
-          ${clave === "test" ? `<p class="compartir-aviso"><b>${links.length === 1 ? "Este link es personalizado" : "Estos links son personalizados"} para tu colegio:</b> así sabemos que las respuestas son de tus estudiantes. ${links.length === 1 ? "Compártelo tal como está" : "Compártelos tal como están"} (lo más fácil es usar el botón Copiar) y solo dentro de tu comunidad escolar.${colegioDelLink(links) ? ` Al ${links.length === 1 ? "abrirlo" : "abrirlos"}, el test mostrará en grande «Estás respondiendo por: ${esc(colegioDelLink(links))}»; si ves ese nombre, el link está bien.` : ""}</p>` : ""}
+          ${avisoPersonalizado(links, clave)}
         </div>
         <div class="compartir-grid">
           <div class="compartir-main">
@@ -3199,12 +3227,18 @@ window.qrcode=qrcode;
     // As the forms' closing screen says it (PENDING: check against the 2026 forms before launch)
     const NOMBRE_TEST = { ase: "Aprendizaje Socioemocional", rel: "Religión" };
 
+    // Same wording as the EFA kickoff email's EDI paragraph (gas/Code.js ESTUDIO_EDI), by ASE cohort
+    const ESTUDIO_EDI = {
+      2025: "Después de dos años de implementación, esta encuesta y el Test de Estudiantes son el último hito del estudio",
+      2026: "En este primer año de implementación, esta encuesta y el Test de Estudiantes son una pieza clave del estudio",
+    };
+
     // Written as if the encargado sends it (Mau 05-10-2026): "Estimado equipo," / "Estimado/a,", full program name
     function mensajeCompartir(prog, clave, links, incluirAvance) {
       const ve = estado.datos.encuestas[clave] || {};
       const programa = `programa de ${PROGRAMAS[prog.programa].titulo} de Fundación Trabün`;
       const entre = entreFechas(ve);
-      const url = l => (clave === "test" ? urlCorta(l) : l.link);
+      const url = l => urlCorta(l, clave);
       const lista = links.length === 1 ? url(links[0]) : links.map(l => `• ${l.etiqueta || "Link"}: ${url(l)}`).join("\n");
       if (clave === "test") {
         // Essentials of last year's instructivo (45 min, at school, list, vocabulary only, final message)
@@ -3218,7 +3252,13 @@ window.qrcode=qrcode;
         const avance = incluirAvance ? avancePorNivel(prog) : "";
         return intro + enlaces + papel + (avance ? `\n\nAsí vamos por nivel:\n${avance}` : "") + dia + "\n\n¡Muchas gracias por su apoyo!";
       }
-      return `Estimado/a,\n\n${entre ? `Entre ${entre} estará disponible` : "Estará disponible"} la Encuesta de Fin de Año del ${programa}. Solo toma unos minutos y tu participación es muy importante para nuestra comunidad. Puedes responderla ${links.length === 1 ? "aquí" : "en el link que te corresponde"}:\n${lista}\n\n¡Muchas gracias!`;
+      // Whoever gets it is who answers: tell them what the first page shows, so they know it's the right survey (Mau 29-10-2026)
+      const verifica = efaDelLink(links) ? `\n\nAl abrirla verás «Estás respondiendo por: ${efaDelLink(links)}»; si no es tu colegio, no la respondas y avísame.` : "";
+      // EDI treated schools (Mau 29-10-2026): the survey takes up to 20 min (consent, RUT…) and is part of the impact study
+      const estudio = ESTUDIO_EDI[prog.edi ? prog.cohorte : null];
+      const duracion = estudio ? "Toma unos 20 minutos" : "Solo toma unos minutos";
+      const parrafoEdi = estudio ? `\n\nNuestro colegio forma parte del Estudio de Impacto del programa. ${estudio}, por eso tu opinión es tan valiosa. Te pido, por favor, que la respondas con calma y a conciencia.` : "";
+      return `Estimado/a,\n\n${entre ? `Entre ${entre} estará disponible` : "Estará disponible"} la Encuesta de Fin de Año del ${programa}. ${duracion} y tu participación es muy importante para nuestra comunidad.${parrafoEdi}${parrafoEdi ? "\n\n" : " "}Puedes responderla ${links.length === 1 ? "aquí" : "en el link que te corresponde"}:\n${lista}${verifica}\n\n¡Muchas gracias!`;
     }
 
     // QR from the kept qrcode library, drawn on a canvas (crisp at any size).

@@ -34,8 +34,8 @@ const sheets = {
     ['test','REL_5-8','REL','','','','5° básico','8° básico','https://f.example/rel58'],
     ['test','REL_I-IV','REL','','','','I° medio','IV° medio','https://f.example/reliv'],
     ['efa','ASE Semi-intensivo','ASE','NO','','Semi-intensivo','','','https://s.example/efa-ase-si'],
-    ['efa','EFA_EDI','ASE','SÍ','','','','','https://s.example/efa-edi'],
-    ['efa','REL Consolidado','REL','','','Consolidado','','','https://s.example/efa-rel-c'],
+    ['efa','EFA_EDI','ASE','SÍ','','','','','https://s.example/efa-edi?rbd={rbd}&colegio={colegio}&comuna={comuna}&k={rbd}'],
+    ['efa','REL Consolidado','REL','','','Consolidado','','','https://s.example/efa-rel-c?rbd={RBD}&colegio={colegio}&comuna={comuna}'],
     ['', '', '', '', '', '', '', '', ''],
   ],
   'Métricas': [['timestamp','rbd','programas','testOk','efaOk','evento']],
@@ -118,8 +118,25 @@ check('short link: separators and case ignored (ASE-4-5, ASE_4-5, ASE4-5, ase45)
   .every(c => corto(c).link === ase.test.links[0].link) && corto('11111-REL-I-IV').link === rel.test.links.find(l => l.form === 'REL_I-IV').link);
 check('short link rejected: unknown RBD, form of another program, EDI form for a non-EDI school, EFA or unknown form, garbage',
   ['99999-ASE_4-5', '33333-REL_5-8', '11111-ASE_EDI_4', '11111-ASE Semi-intensivo', '11111-XYZ', 'ASE_4-5', '', null].every(c => corto(c).error === 'link'));
+const cortoEfa = c => post({ corto: c, encuesta: 'efa' });
+check('EFA short link (/e/): same full link the panel shares, separators and case ignored, link without gaps as written',
+  cortoEfa('11111-REL-Consolidado').link === rel.efa.links[0].link && cortoEfa('11111-rel consolidado').link === rel.efa.links[0].link
+  && cortoEfa('11111-ASE-Semi-intensivo').link === 'https://s.example/efa-ase-si' && /rbd=22222&colegio=Escuela%20El%20Faro/.test(cortoEfa('22222-EFA-EDI').link));
+check('EFA short link rejected: Test form on /e/, EDI form for a non-EDI school, unknown RBD; /t/ still only Test',
+  ['11111-ASE_4-5', '11111-EFA_EDI', '99999-REL-Consolidado'].every(c => cortoEfa(c).error === 'link') && corto('11111-REL-Consolidado').error === 'link');
+check('EFA never for a Control program (EDI controls included), Test rows unaffected', (() => {
+  const ctl = { programa: 'ase', edi: true, modelo: 'Control', anioInicio: 2025 }, forms = ctx.cargarDatos_().formularios;
+  return ctx.formulariosDe_(forms, 'efa', ctl).length === 0 && ctx.formulariosDe_(forms, 'efa', Object.assign({}, ctl, { modelo: 'Intensivo' })).length === 1
+    && ctx.formulariosDe_(forms, 'test', ctl).length > 0; })());
 check('short link: no Métricas row, no throttle', sheets['Métricas'].length === nMetCorto && !Object.keys(cacheStore).some(k => k.startsWith('intentos_1')));
-check('EFA links unchanged (no RBD added)', ase.efa.links[0].link === 'https://s.example/efa-ase-si');
+check('EFA link without gaps shown as written (no RBD added)', ase.efa.links[0].link === 'https://s.example/efa-ase-si');
+check('EFA link gaps filled per school ({RBD} case-insensitive, name and comuna apart, as in the EFA links file)',
+  rel.efa.links[0].link === 'https://s.example/efa-rel-c?rbd=11111&colegio=Colegio%20Los%20Aromos&comuna=Villa%20Ficticia');
+check('gaps: spaces collapsed, quotes and parentheses escaped like the links file; missing SF name → no link',
+  ctx.linkPlantilla_('https://x/?rbd={rbd}&colegio={colegio}&comuna={comuna}', '2787', { nombre: "Colegio  Nuestra Señora (Ex ST) D'Agostini", comuna: 'Curicó' })
+    === 'https://x/?rbd=2787&colegio=Colegio%20Nuestra%20Se%C3%B1ora%20%28Ex%20ST%29%20D%27Agostini&comuna=Curic%C3%B3'
+  && ctx.linkPlantilla_('https://x/?rbd={rbd}&colegio={colegio}', '5', { nombre: null, comuna: null }) === ''
+  && ctx.linkPlantilla_('https://x/?rbd={rbd}', '5', null) === 'https://x/?rbd=5');
 check('link that already has RBD or a query: kept / appended with &', ctx.linkColegio_('https://x.example/r/A?RBD=5', '11111', null) === 'https://x.example/r/A?RBD=5'
   && ctx.linkColegio_('https://x.example/r/A?lang=es', '11111', { nombre: 'Escuela  Uno', comuna: 'Ñuble' }) === 'https://x.example/r/A?lang=es&RBD=11111&colegio=Escuela%20Uno%2C%20%C3%91uble');
 const lv = n => ase.test.niveles.find(x=>x.nivel===n);
@@ -149,6 +166,27 @@ check('EFA total = responses after dedup, 2 roles = 2 (5)', ase.efa.total === 5 
 check('ASE docentes grades carry SF CxN as cursos (2; null outside/no grade)', sec('docentes').niveles.every(g => g.registrado ? g.cursos === 2 : g.cursos === null));
 check('REL docentes carry declared grades', JSON.stringify(rel.efa.secciones[2].personas.map(x => x.niveles)) === JSON.stringify([['6° básico']]) && sec('direccion').personas.every(x => !('niveles' in x)));
 check('REL docentes flat list', Array.isArray(rel.efa.secciones[2].personas) && !rel.efa.secciones[2].niveles);
+check('2026 EFA role options → section + short label (REL, ASE, EDI wordings; leading "Soy" ignored; unknown → Líderes)', [
+  ['Director/a del establecimiento', 'direccion', 'Director/a'],
+  ['Encargado/a del Programa, es decir, estoy a cargo de la relación del establecimiento con la Fundación', 'lideres', 'Encargado/a'],
+  ['Mentor/a, es decir, acompaño y retroalimento a docentes que implementan el Programa', 'lideres', 'Mentor/a'],
+  ['Cumplo ambos roles, es decir, soy Encargado/a y Mentor/a del Programa', 'lideres', 'Encargado/a y Mentor/a'],
+  ['Docente que implementa el Programa de Religión de Trabün', 'docentes', 'Docente'],
+  ['Docente que implementa el Programa ASE-Orientación de Trabün', 'docentes', 'Docente'],
+  ['Cumplo todos los roles: Encargado/a, Mentor/a y Docente', 'lideres+docentes', 'Encargado/a, Mentor/a y Docente'],
+  ['Otro/a líder del establecimiento (UTP, coordinador/a u otros)', 'lideres', 'Otro/a líder'],
+  ['Soy Docente e implemento el Programa de ASE-Orientación Trabün en sala de clases', 'docentes', 'Docente'],
+  ['Soy Mentor/a del programa, es decir, acompaño y retroalimento a docentes que implementan el programa.', 'lideres', 'Mentor/a'],
+  ['Soy Encargado del programa, es decir, estoy a cargo de la relación del establecimiento con Trabün.', 'lideres', 'Encargado/a'],
+  ['Equipo Directivo / Convivencia Escolar.', 'direccion', 'Equipo Directivo / Convivencia Escolar'],
+  ['Algo nuevo, con coma', 'lideres', 'Algo nuevo'],
+].every(([t, sec, corto]) => { const r = ctx.rolEfa_(t); return r.secciones.join('+') === sec && r.corto === corto; }));
+sheets['Respuestas EFA'].push(['REL Consolidado','2026-11-03T16:00:00','Tomás','Vega','tv@ejemplo.cl',AROMOS,'Cumplo todos los roles: Encargado/a, Mentor/a y Docente','-']);  // the survey asks them no grades
+const relTodos = ctx.panel_('11111', ctx.cargarDatos_(), ctx.reloj_()).programas.find(p => p.programa === 'rel').efa;
+check('"Cumplo todos los roles": listed in Líderes and in Docentes (no grades: not asked), counted once in the total',
+  relTodos.total === 2 && relTodos.secciones[1].personas.map(x => x.nombre).join() === 'Tomás Vega' && relTodos.secciones[2].personas.map(x => x.nombre).join() === 'Francisca Mella,Tomás Vega'
+  && relTodos.secciones[2].personas[1].niveles.length === 0 && relTodos.secciones[1].r + relTodos.secciones[2].r === 3);
+sheets['Respuestas EFA'].pop();
 check('no emails anywhere in payload', !JSON.stringify(r).includes('@ejemplo.cl'));
 
 sheets['Config'][5][1] = 'numero';
@@ -165,6 +203,8 @@ delete cacheStore['intentos_22222'];
 const re2 = post({rbd:'22222', clave:'bbb222'});
 check('EDI cohort 2025: contacto EDI, test grades 4° + I°–IV°, link only where filled', re2.contacto === 'consultas_edi@fundaciontrabun.cl' && re2.programas[0].test.nivelesTest.join() === '4° básico,I° medio,II° medio,III° medio,IV° medio' && re2.programas[0].test.links.map(l=>l.form).join() === 'ASE_EDI_4');
 check('EDI: only EFA_EDI form', re2.programas[0].efa.links.map(l=>l.form).join() === 'EFA_EDI');
+check('EDI EFA link carries k = RBD (ASE surveys)', re2.programas[0].efa.links[0].link === 'https://s.example/efa-edi?rbd=22222&colegio=Escuela%20El%20Faro&comuna=Puerto%20Inventado&k=22222');
+check('EDI cohort sent for the EFA message (null for non-EDI programs)', re2.programas[0].cohorte === 2025 && ase.cohorte === null && rel.cohorte === null);
 check('EDI cohort 2025: paper grades 5°–8° (implemented, not online); non-EDI none', re2.programas[0].test.nivelesPapel.join() === '5° básico,6° básico,7° básico,8° básico' && ase.test.nivelesPapel.length === 0 && rel.test.nivelesPapel.length === 0);
 check('EDI: 8° response from cohort-2 form shows as outside', re2.programas[0].test.niveles.find(n=>n.nivel==='8° básico').registrado === false);
 

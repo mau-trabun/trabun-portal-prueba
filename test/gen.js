@@ -8,6 +8,20 @@ sheets['SF'].splice(5, 0,
   sfRow(77777, 'Valle Imaginario - Jardín Las Nubes - 77777', 'ASE', 'Semi-Intensivo', false, 2025, '', range(0,1,[30,1])),
   sfRow(88888, 'Monte Ficticio - Colegio Del Sol - 88888', 'ASE', 'Intensivo', false, 2024, '', range(5,9,[50,2])));
 sheets['Contraseñas'].push([55555,'eee555'],[66666,'fff666'],[77777,'ggg777'],[88888,'hhh888']);
+// 2026 EFA cases: a SIP school with EFA (the agreed exceptions), REL only in 1°–4° (no Test, EFA yes), excluded Cuadernillos
+sheets['SF'][0].push('Sostenedor');
+sheets['SF'].slice(1).forEach(r => { if (r[0]) r.push(''); });
+sheets['SF'].splice(5, 0,
+  sfRow(91111, 'Cerro Inventado - Colegio Los Nogales Ficticio - 91111', 'Religión', 'Consolidado', false, '', 2023, range(6,11,[30,1])).concat(['Sociedad De Instruccion Primaria De Santiago']),
+  sfRow(92222, 'Isla Ficticia - Escuela Primeros Años - 92222', 'Religión', 'Semi-Intensivo', false, '', 2024, range(2,5,[25,1])).concat(['']),
+  sfRow(93333, 'Loma Falsa - Colegio Cuadernos - 93333', 'Religión', 'Cuadernillos', false, '', 2024, range(6,9,[25,1])).concat(['Sociedad De Instruccion Primaria De Santiago']));
+sheets['Contraseñas'].push([91111,'iii911'],[92222,'jjj922'],[93333,'kkk933']);
+const fRow = sheets['Formularios'].findIndex(r => r[0] === '');
+sheets['Formularios'].splice(fRow, 0,
+  ['efa','REL Intensivo','REL','','','Intensivo','','','https://s.example/efa-rel-i?rbd={rbd}&colegio={colegio}&comuna={comuna}'],
+  ['efa','REL Semi-intensivo','REL','','','Semi-Intensivo','','','https://s.example/efa-rel-s?rbd={rbd}&colegio={colegio}&comuna={comuna}'],
+  ['efa','ASE Intensivo','ASE','NO','','Intensivo','','','https://s.example/efa-ase-i?rbd={rbd}&colegio={colegio}&comuna={comuna}&k={rbd}'],
+  ['efa','REL Cuadernillos','REL','','','Cuadernillos','','','']);
 sheets['Respuestas Test'] = [sheets['Respuestas Test'][0]];
 sheets['Respuestas EFA'] = [sheets['Respuestas EFA'][0]];
 const fmtOld = ctx.Utilities.formatDate;
@@ -32,13 +46,20 @@ check('test rows: one Colegio per row, full width', t.slice(1).every(r => r.leng
 check('EFA emails all @ejemplo.invalid', e.slice(1).every(r => /@ejemplo\\.invalid$/.test(r[4])));
 let err = ''; try { ctx.generarDatosPrueba(); } catch (x) { err = x.message; }
 check('second run refused', /ya tiene filas/.test(err));
-const claves = {11111:'aaa111',22222:'bbb222',55555:'eee555',66666:'fff666',77777:'ggg777',88888:'hhh888'};
+const claves = {11111:'aaa111',22222:'bbb222',55555:'eee555',66666:'fff666',77777:'ggg777',88888:'hhh888',91111:'iii911',92222:'jjj922'};
 Object.keys(claves).forEach(rbd => {
   if (!informe.includes('RBD ' + rbd)) return;
   const r = post({ rbd, clave: claves[rbd] });
   const s = r.programas.map(p => p.programa + ': test r=' + p.test.resumen.r + ' (' + p.test.niveles.map(n => n.nivel + (n.registrado ? '' : '*') + '=' + n.r).join(', ') + ') · efa total=' + p.efa.total + ' [' + p.efa.secciones.map(x => x.id + '=' + x.r).join(' ') + ']').join('\\n    ');
   console.log('  ' + rbd + ' ok=' + r.ok + '\\n    ' + s);
-  check(rbd + ' login ok and has responses', r.ok && r.programas.every(p => p.test.resumen.r > 0 && p.efa.total > 0));
+  check(rbd + ' login ok and has responses (EFA where it has a link)', r.ok && r.programas.every(p => (p.test.resumen.r > 0 || !p.test.niveles.length) && (p.efa.total > 0) === (p.efa.links.length > 0)));
 });
+check('2026 role options used; EDI wording only in EDI schools; "todos los roles" only in REL', (() => {
+  const roles = e.slice(1).map(r => r[6]), ediRows = e.slice(1).filter(r => r[0] === 'EFA_EDI');
+  return roles.some(x => /^Cumplo ambos/.test(x)) && ediRows.length && ediRows.every(r => !/^Cumplo/.test(r[6]) && !/^Encargado.a del Programa/.test(r[6]))
+    && ediRows.some(r => /^Soy Docente/.test(r[6])) && e.slice(1).filter(r => /^Cumplo todos/.test(r[6])).every(r => /^REL/.test(r[0]));
+})());
+check('no EFA rows for programs without an EFA link (excluded groups)', !e.slice(1).some(r => /93333/.test(r.join('|'))));
+check('new cases chosen: SIP exception, REL without Test', informe.includes('SIP con EFA (excepción): RBD 91111') && informe.includes('Religión sin Test, con EFA (solo 1° a 4° básico): RBD 92222'));
 console.log(ctx.revisarFormularios());
 `);

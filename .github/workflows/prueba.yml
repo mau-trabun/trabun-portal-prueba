@@ -25,8 +25,8 @@ jobs:
       - name: Marcar como prueba
         run: |
           rm -f docs/CNAME
-          sed -i 's#</head>#<meta name="robots" content="noindex"><style>@media print{.tag-prueba{display:none}}</style></head>#' docs/index.html docs/t/index.html
-          sed -i 's#<title>#<title>PRUEBA · #' docs/index.html docs/t/index.html
+          sed -i 's#</head>#<meta name="robots" content="noindex"><style>@media print{.tag-prueba{display:none}}</style></head>#' docs/index.html docs/t/index.html docs/e/index.html
+          sed -i 's#<title>#<title>PRUEBA · #' docs/index.html docs/t/index.html docs/e/index.html
           sed -i 's#<body>#<body><div class="tag-prueba" style="position:fixed;left:12px;bottom:12px;z-index:9999;pointer-events:none;background:\#151b29;color:\#fff;font:700 12px/1 Mulish,system-ui,sans-serif;letter-spacing:.06em;padding:8px 12px;border-radius:999px;opacity:.85">PORTAL DE PRUEBA · DATOS FICTICIOS</div>#' docs/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
