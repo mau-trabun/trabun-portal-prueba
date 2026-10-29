@@ -253,6 +253,10 @@ check('internal view: own attempt counter, a teammate\'s typos never lock the sc
   const bloqueadoInterno = post({rbd:'11111trabun', clave:'aaa111'}).error === 'bloqueado';
   const ok = bloqueadoInterno && post({rbd:'11111', clave:'aaa111'}).ok === true && !cacheStore['intentos_11111'];
   delete cacheStore['intentos_11111_interno']; return ok; })());
+check('mistyped suffix ("11111tra", "11111 trabu") refused instead of counting as the school; check digit still accepted', (() => {
+  const n = met.length;
+  return post({rbd:'11111tra', clave:'aaa111'}).error === 'credenciales' && post({rbd:'11111 trabu', clave:'aaa111'}).error === 'credenciales'
+    && met.length === n && post({rbd:'11111-K', clave:'aaa111', refresco:true}).ok === true && post({rbd:'11111-6', clave:'aaa111', refresco:true}).ok === true; })());
 check('internal view needs the right clave; other suffixes are not internal', post({rbd:'11111trabun', clave:'zzz'}).error === 'credenciales' && !post({rbd:'11111equipo', clave:'aaa111'}).interno);
 delete cacheStore['intentos_11111_interno'];
 const pp = ctx.probarPanel(); console.log('--- probarPanel() ---\n' + pp);

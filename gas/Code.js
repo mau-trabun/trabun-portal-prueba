@@ -61,8 +61,12 @@ function login_(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (_) { /* malformed → credenciales */ }
   if (body && body.corto !== undefined) return linkCorto_(body.corto, body.encuesta === 'efa' ? 'efa' : 'test'); // /t/ and /e/ pages: no clave, only what the link carries
-  const interno = RE_INTERNO.test(String(body.rbd == null ? '' : body.rbd));
-  const rbd = normRbd_(interno ? String(body.rbd).match(RE_INTERNO)[1] : body.rbd);
+  const crudo = String(body.rbd == null ? '' : body.rbd);
+  const interno = RE_INTERNO.test(crudo);
+  // Letters that aren't the exact suffix ("26466tra", "26466trabu") are refused, so a mistyped internal login fails
+  // instead of counting as the school's use. A check digit ("12345-6", "12345-K") still passes as before.
+  if (!interno && /[a-z]{2,}/i.test(crudo)) return { ok: false, error: 'credenciales' };
+  const rbd = normRbd_(interno ? crudo.match(RE_INTERNO)[1] : body.rbd);
   const clave = String(body.clave == null ? '' : body.clave).trim();
   if (!rbd || !clave) return { ok: false, error: 'credenciales' };
 
