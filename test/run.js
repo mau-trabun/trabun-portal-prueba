@@ -241,6 +241,20 @@ check('evento blocked like a login', (() => { [...Array(8)].forEach(() => post({
 delete cacheStore['intentos_33333'];
 check('evento + refresco: still only the event row', post({rbd:'11111', clave:'aaa111', evento:'efa_qr', programa:'rel', refresco:true}).ok && met.length === nEv + 3);
 check('response carries no timing', !('ms' in r));
+// Internal team view: "<RBD>trabun" + the school's clave
+const nInt = met.length;
+const ri = post({rbd:' 11111 Trabun ', clave:'aaa111'});
+check('internal view: "<RBD>trabun" (case/spaces/"-" ignored) opens the school panel, marked interno; normal login unmarked',
+  ri.ok && ri.interno === true && ri.colegio.rbd === '11111' && post({rbd:'11111-TRABUN', clave:'aaa111', refresco:true}).interno === true && !('interno' in r));
+check('internal view: Métricas row "login_interno", events "<evento>_interno", refresh no row', met.length === nInt + 1 && met[nInt][5] === 'login_interno'
+  && post({rbd:'11111trabun', clave:'aaa111', evento:'efa_copiar_link', programa:'rel'}).ok && met[nInt + 1][5] === 'efa_copiar_link_interno' && met.length === nInt + 2);
+check('internal view: own attempt counter, a teammate\'s typos never lock the school out', (() => {
+  [...Array(8)].forEach(() => post({rbd:'11111trabun', clave:'nope'}));
+  const bloqueadoInterno = post({rbd:'11111trabun', clave:'aaa111'}).error === 'bloqueado';
+  const ok = bloqueadoInterno && post({rbd:'11111', clave:'aaa111'}).ok === true && !cacheStore['intentos_11111'];
+  delete cacheStore['intentos_11111_interno']; return ok; })());
+check('internal view needs the right clave; other suffixes are not internal', post({rbd:'11111trabun', clave:'zzz'}).error === 'credenciales' && !post({rbd:'11111equipo', clave:'aaa111'}).interno);
+delete cacheStore['intentos_11111_interno'];
 const pp = ctx.probarPanel(); console.log('--- probarPanel() ---\n' + pp);
 check('probarPanel logs counts, no names or emails', !/Martina|Rojas|@ejemplo/.test(pp) && /RBD 11111/.test(pp));
 check('no clave in logs', !logs.join('\n').match(/aaa111|bbb222|ddd444/));

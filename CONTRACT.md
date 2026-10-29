@@ -84,6 +84,7 @@ Same import pattern as EFS.
 ### `Métricas` (append-only, successful logins and usage events only)
 `timestamp | rbd | programas | testOk | efaOk | evento`. It never stores the clave, IP or names.
 - Login: `programas` = the school's programs (`ASE,REL`), `testOk`/`efaOk` booleans, `evento` = `login`.
+- **Internal team view (29-10-2026):** RBD typed as `<RBD>trabun` (case, spaces and "-" ignored) + the school's clave → same panel plus `"interno": true`; rows are written with `evento` = `login_interno` and `<evento>_interno` (e.g. `efa_qr_interno`), which every count (team tracker, usage) skips; attempts counted apart (`intentos_<rbd>_interno`).
 - Usage event (sent by the portal once per session each): `programas` = the program of the card used (`ASE` | `REL`; blank for `ver_efa`), `testOk`/`efaOk` blank, `evento` one of: `ver_efa` (EFA tab opened); `test_copiar_link`, `test_copiar_mensaje`, `test_whatsapp`, `test_qr`, `test_instructivo`, `test_copiar_lista`, `test_whatsapp_lista`; `efa_copiar_link`, `efa_copiar_mensaje`, `efa_whatsapp`, `efa_qr`.
 
 ### `Sin Test` (written by `listarSinTest()`, manual; Mau ticks `Habilitar`)

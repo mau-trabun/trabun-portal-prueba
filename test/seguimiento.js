@@ -15,6 +15,8 @@ sheets['Métricas'].push(
   [new Date(2026, 9, 14, 9, 0), 11111, 'ASE,REL', true, true, 'login'],
   [46309.875, 22222, 'ASE', true, true, 'login'],                      // date cell without date format: serial 14-10-2026 21:00
   ['2026-10-16 18:45:00', 11111, 'ASE,REL', true, true, 'login'],          // Cloud Run writes text timestamps
+  ['2026-10-20 10:00:00', 11111, 'ASE,REL', true, true, 'login_interno'],  // team member's internal view: never counted
+  ['2026-10-20 10:01:00', 11111, 'REL', '', '', 'test_qr_interno'],
   [new Date(2026, 9, 16, 18, 46), 11111, 'ASE', '', '', 'test_whatsapp'],
   [new Date(2026, 9, 16, 18, 47), 11111, 'ASE', '', '', 'test_instructivo'],
   [new Date(2026, 9, 16, 18, 48), 11111, 'ASE', '', '', 'test_whatsapp'],   // repeated → once
@@ -52,7 +54,7 @@ check('EDI paper grades shown as "Papel"', f.EDI === 'SÍ' && f['5° básico res
 check('Cursos sin respuestas: registered classes with 0 (short labels), not unregistered ones',
   a['Cursos sin respuestas'] === '5°A, 5°B, 6°A, 7°A, 7°B, 8°A, 8°B' && !/4°/.test(a['Cursos sin respuestas']));
 check('Correo enviado: date only, also when stored as a plain number (serial)', a['Correo enviado'] === '09-10-2026' && rl['Correo enviado'] === '09-10-2026' && f['Correo enviado'] === '08-10-2026');
-check('portal use: logins per school (Date and text timestamps), latest one', a['Ingresos al portal'] === 2 && a['Último ingreso'] === '16-10-2026 18:45');
+check('portal use: logins per school (Date and text timestamps), latest one; internal views (login_interno, *_interno) never counted', a['Ingresos al portal'] === 2 && a['Último ingreso'] === '16-10-2026 18:45');
 check('portal use: a timestamp stored as a plain number (serial) still reads as its date', f['Ingresos al portal'] === 1 && f['Último ingreso'] === '14-10-2026 21:00');
 check('Test share actions per program, deduplicated; EFA and ver_efa left out',
   a['Compartió el Test'] === 'WhatsApp, instructivo' && rl['Compartió el Test'] === 'lista por curso' && f['Compartió el Test'] === '');

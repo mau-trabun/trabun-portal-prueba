@@ -51,17 +51,24 @@ function doPost(e) {
   return json_(res);
 }
 
+// Internal team view (Mau 29-10-2026): "<RBD>trabun" + the school's clave opens the school's panel without counting as
+// the school's use: Métricas rows get evento "login_interno" / "<evento>_interno" (the tracker and usage counts skip
+// them) and a separate attempt counter, so a teammate's typos never lock the school out. Not a secret (public repo):
+// it still needs the school's clave, it only keeps the metrics clean.
+const RE_INTERNO = /^\s*(\d+)\s*-?\s*trabun\s*$/i;
+
 function login_(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (_) { /* malformed → credenciales */ }
   if (body && body.corto !== undefined) return linkCorto_(body.corto, body.encuesta === 'efa' ? 'efa' : 'test'); // /t/ and /e/ pages: no clave, only what the link carries
-  const rbd = normRbd_(body.rbd);
+  const interno = RE_INTERNO.test(String(body.rbd == null ? '' : body.rbd));
+  const rbd = normRbd_(interno ? String(body.rbd).match(RE_INTERNO)[1] : body.rbd);
   const clave = String(body.clave == null ? '' : body.clave).trim();
   if (!rbd || !clave) return { ok: false, error: 'credenciales' };
 
   // Throttle counts attempts for any RBD, existing or not, so it can't be used to enumerate.
   const cache = CacheService.getScriptCache();
-  const kIntentos = 'intentos_' + rbd;
+  const kIntentos = 'intentos_' + rbd + (interno ? '_interno' : '');
   const intentos = Number(cache.get(kIntentos)) || 0;
   if (intentos >= MAX_INTENTOS) return { ok: false, error: 'bloqueado' };
 
@@ -72,10 +79,11 @@ function login_(e) {
   }
   cache.remove(kIntentos);
 
-  if (body.evento !== undefined) return registrarEvento_(rbd, body); // usage event: no panel built
+  if (body.evento !== undefined) return registrarEvento_(rbd, body, interno); // usage event: no panel built
 
   const res = panel_(rbd, cargarDatos_(), reloj_());
-  if (body.refresco !== true) registrarMetrica_(res); // auto/manual refreshes are not new logins
+  if (interno) res.interno = true; // the portal shows "Vista interna"
+  if (body.refresco !== true) registrarMetrica_(res, interno); // auto/manual refreshes are not new logins
   return res;
 }
 
@@ -583,7 +591,7 @@ function ventana_(abreRaw, cierraRaw, hoy) {
   return { abre, cierra, fase, diasRestantes: fase === 'open' ? diasEntre_(hoy, cierra) : null };
 }
 
-function registrarMetrica_(res) {
+function registrarMetrica_(res, interno) {
   try {
     const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.metricas);
     if (!sh) return;
@@ -593,7 +601,7 @@ function registrarMetrica_(res) {
       res.programas.map(p => p.programa.toUpperCase()).join(','),
       res.programas.every(p => p.test.ok),
       res.programas.every(p => p.efa.ok),
-      'login',
+      interno ? 'login_interno' : 'login',
     ]);
   } catch (err) {
     console.error('Métricas: ' + (err && err.message));
@@ -605,12 +613,12 @@ const EVENTOS = ['ver_efa',
   'test_copiar_link', 'test_copiar_mensaje', 'test_whatsapp', 'test_qr', 'test_instructivo', 'test_copiar_lista', 'test_whatsapp_lista',
   'efa_copiar_link', 'efa_copiar_mensaje', 'efa_whatsapp', 'efa_qr'];
 
-function registrarEvento_(rbd, body) {
+function registrarEvento_(rbd, body, interno) {
   const programa = body.programa == null ? '' : String(body.programa);
   if (EVENTOS.indexOf(body.evento) < 0 || ['', 'ase', 'rel'].indexOf(programa) < 0) return { ok: false, error: 'evento' };
   try {
     const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.metricas);
-    if (sh) sh.appendRow([new Date(), rbd, programa.toUpperCase(), '', '', body.evento]);
+    if (sh) sh.appendRow([new Date(), rbd, programa.toUpperCase(), '', '', body.evento + (interno ? '_interno' : '')]);
   } catch (err) {
     console.error('Métricas: ' + (err && err.message));
   }
