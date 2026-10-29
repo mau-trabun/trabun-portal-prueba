@@ -1736,7 +1736,6 @@ function fakeEfa_(p, colegioTxt, forms, rnd, conBordes) {
     out.push(Object.assign({}, out[0], { Apellido: out[0].Apellido + ' ' + elegir_(FAKE_APELLIDOS, rnd),  // resubmission
       Fecha: Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm:ss") }));
     if (p.programa === 'ase') {
-      out.push(persona(edi ? R.ediDocente : R.ase, '-'));                                                  // no grade
       const fuera = NIVELES.map((_, i) => i).filter(i => p.implementados.indexOf(i) < 0 && i >= 2);
       if (fuera.length) out.push(persona(edi ? R.ediDocente : R.ase, NIVELES[fuera[fuera.length - 1]]));    // outside registered
     }
