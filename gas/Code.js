@@ -1389,7 +1389,8 @@ function correoEfa_(res, progs, enc, clave, testEnviado, cohorte) {
   ];
   const entrar = testEnviado ? `${tu('Entra', 'Entren')} con el mismo RBD y clave que ${tu('te', 'les')} enviamos el ${fechaCorta_(testEnviado)}`
     : `${tu('Entra', 'Entren')} al portal con estos datos`;
-  const reserva = `La clave es solo para el equipo de ${tu('tu', 'su')} colegio; ${tu('te', 'les')} pedimos no compartirla fuera de él.`;
+  // Narrower than the Test email (Mau 30-10-2026): the EFA panel lists colleagues by name, so not the whole team
+  const reserva = `La clave es para ${tu('ti', 'ustedes')} y quienes ${tu('te', 'les')} ayuden con el seguimiento; ${tu('te', 'les')} pedimos no compartirla con nadie más, ya que en el portal se ve quién ha respondido.`;
   const gracias = `¡Muchas gracias por ${tu('tu', 'su')} apoyo!`;
   const pie = `Este es un correo automático, por favor no lo ${tu('respondas', 'respondan')}. Si ${tu('tienes', 'tienen')} cualquier duda, ${tu('escríbenos', 'escríbannos')} a ${contacto}.`;
 

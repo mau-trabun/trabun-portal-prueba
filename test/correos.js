@@ -126,6 +126,8 @@ check('EFA: Test email sent → "the same RBD and clave we sent on 9 de octubre"
   && ea.Mensaje.includes('Entren con el mismo RBD y clave que les enviamos el 9 de octubre:\\nRBD: 11111\\nClave: aaa111'));
 check('EFA: no Test email → plain "enter with these details", singular', ef.Mensaje.includes('Te escribimos') && ef.Mensaje.includes('Entra al portal con estos datos:\\nRBD: 22222\\nClave: bbb222')
   && !ef.Mensaje.includes('el mismo del Test') && ef.Mensaje.includes('del programa de Aprendizaje Socioemocional') && ef.Mensaje.includes('participan en el programa.') && ef.Contacto === 'consultas_edi@fundaciontrabun.cl');
+check('EFA: clave only for whoever helps with the follow-up, with the reason (singular / plural); Test wording unchanged', ef.Mensaje.includes('La clave es para ti y quienes te ayuden con el seguimiento; te pedimos no compartirla con nadie más, ya que en el portal se ve quién ha respondido.')
+  && ea.Mensaje.includes('La clave es para ustedes y quienes les ayuden con el seguimiento; les pedimos no compartirla con nadie más') && !ef.Mensaje.includes('fuera de él') && a.Mensaje.includes('pedimos no compartirla fuera de él'));
 check('EFA: Control left out with its own reason', ec.Enviar === false && ec.Programas === '' && ec.Observaciones.includes('Sin programas con link EFA'));
 enviados = [];
 ctx.enviarCorreoPruebaEfa();
