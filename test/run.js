@@ -124,6 +124,11 @@ check('EFA short link (/e/): same full link the panel shares, separators and cas
   && cortoEfa('11111-ASE-Semi-intensivo').link === 'https://s.example/efa-ase-si' && /rbd=22222&colegio=Escuela%20El%20Faro/.test(cortoEfa('22222-EFA-EDI').link));
 check('EFA short link rejected: Test form on /e/, EDI form for a non-EDI school, unknown RBD; /t/ still only Test',
   ['11111-ASE_4-5', '11111-EFA_EDI', '99999-REL-Consolidado'].every(c => cortoEfa(c).error === 'link') && corto('11111-REL-Consolidado').error === 'link');
+check('Control program: an EFA response sent by mistake is not shown (no tab: no link, total 0)', (() => {
+  sheets['Respuestas EFA'].push(['ASE Semi-intensivo','2026-11-03T10:00:00','Error','Control','ec@ejemplo.cl','Cerro Falso - Liceo Control - 33333','Docente que implementa el Programa ASE-Orientación de Trabün','5° básico']);
+  const e = ctx.panel_('33333', ctx.cargarDatos_(), ctx.reloj_()).programas[0].efa;
+  sheets['Respuestas EFA'].pop();
+  return e.links.length === 0 && e.total === 0 && e.secciones.every(x => x.r === 0); })());
 check('EFA never for a Control program (EDI controls included), Test rows unaffected', (() => {
   const ctl = { programa: 'ase', edi: true, modelo: 'Control', anioInicio: 2025 }, forms = ctx.cargarDatos_().formularios;
   return ctx.formulariosDe_(forms, 'efa', ctl).length === 0 && ctx.formulariosDe_(forms, 'efa', Object.assign({}, ctl, { modelo: 'Intensivo' })).length === 1

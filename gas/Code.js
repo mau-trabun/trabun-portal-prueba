@@ -373,7 +373,9 @@ function panelPrograma_(rbd, p, d, studentId) {
   }
   const efa = { ok: !!d.efa, links: links_(formulariosDe_(d.formularios, 'efa', p), rbd, d.sf[rbd]) };
   if (d.efa) {
-    Object.assign(efa, bloqueEfa_(p, d.efa.filter(x => x.rbd === rbd && x.programa === p.programa)));
+    // Control programs never get EFA (Mau 30-10-2026): a response sent by mistake is not shown either, so the tab never appears
+    const control = normTexto_(p.modelo) === 'control';
+    Object.assign(efa, bloqueEfa_(p, control ? [] : d.efa.filter(x => x.rbd === rbd && x.programa === p.programa)));
   }
   return {
     programa: p.programa,
