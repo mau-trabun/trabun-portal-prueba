@@ -218,6 +218,7 @@ function leerSF_() {
     col.programas[programa] = {
       programa,
       modelo: String(row[c.modelo] || '').trim(),
+      sostenedor: c.sostenedor >= 0 ? String(row[c.sostenedor] || '').trim() : '', // Formularios "Sostenedor" filter
       jefeProyecto: c.jefe >= 0 ? limpio_(row[c.jefe]) : null,
       coordinador: c.coord >= 0 ? limpio_(row[c.coord]) : null,
       proyecto: c.proyecto >= 0 ? String(row[c.proyecto] || '').trim() : '',
@@ -248,6 +249,7 @@ function leerFormularios_() {
   const c = {};
   ['Encuesta', 'Form', 'Programa', 'EDI', 'Año inicio', 'Modelo', 'Desde', 'Hasta', 'Link']
     .forEach(h => { c[h] = colExacta_(t, h); });
+  const cSost = t.headers.indexOf('Sostenedor'); // optional column
   return t.rows
     .map((r, i) => ({
       fila: i + 2,
@@ -260,6 +262,7 @@ function leerFormularios_() {
       desde: String(r[c.Desde]).trim(),
       hasta: String(r[c.Hasta]).trim(),
       link: String(r[c.Link]).trim(),
+      sostenedor: cSost >= 0 ? normTexto_(r[cSost]) : '',
     }))
     .filter(f => f.encuesta);
 }
@@ -395,12 +398,14 @@ function formulariosDe_(formularios, encuesta, p) {
   return formularios.filter(f => f.encuesta === encuesta && aplica_(f, p));
 }
 
-// Blank cell = any. Text compared ignoring case and accents.
+// Blank cell = any. Text compared ignoring case and accents. Sostenedor (optional column, 30-10-2026): the SF
+// sostenedor must contain that text, e.g. "Instrucción Primaria" so REL Cuadernillos reaches only the SIP schools.
 function aplica_(f, p) {
   return (!f.programa || f.programa === p.programa)
     && (!f.edi || (f.edi === 'si') === p.edi)
     && (!f.anio || f.anio === p.anioInicio)
-    && (!f.modelo || f.modelo === normTexto_(p.modelo));
+    && (!f.modelo || f.modelo === normTexto_(p.modelo))
+    && (!f.sostenedor || normTexto_(p.sostenedor).indexOf(f.sostenedor) >= 0);
 }
 
 function rango_(f) {
@@ -1089,7 +1094,7 @@ const CORREOS = {
   test: { tab: TAB_CORREOS, preparar: 'prepararCorreosTest', enviar: 'enviarCorreosTest', categorias: true,
     programas: res => programasConTest_(res), sinProgramas: 'Sin programas con Test (Control o pestaña Sin Test)' },
   efa: { tab: 'Correos EFA', preparar: 'prepararCorreosEfa', enviar: 'enviarCorreosEfa', categorias: false,
-    programas: res => programasConEfa_(res), sinProgramas: 'Sin programas con link EFA (Control o sin fila EFA en Formularios)' },
+    programas: res => programasConEfa_(res), sinProgramas: 'Sin programas con link EFA (Control, Cuadernillos con correo manual, o sin fila EFA en Formularios)' },
 };
 const COLS_CORREOS = ['RBD', 'Colegio', 'Programas', 'Jefe/a de Proyecto', 'Para', 'CC', 'Nombres', 'Contacto', 'Asunto', 'Mensaje',
   'Observaciones', 'Enviar', 'Enviado'];
@@ -1188,9 +1193,10 @@ function programasConTest_(res) {
     && ((p.test.nivelesTest || []).some(n => (p.nivelesImplementados || []).indexOf(n) >= 0) || p.test.habilitado));
 }
 
-// EFA: not Control, and with a school link (an EFA row in Formularios and SF name + comuna for its gaps)
+// EFA: not Control, and with a school link (an EFA row in Formularios and SF name + comuna for its gaps).
+// Cuadernillos (REL SIP) get their EFA email by hand (Mau 30-10-2026), so they are left out here.
 function programasConEfa_(res) {
-  return res.programas.filter(p => normTexto_(p.modelo) !== 'control' && (p.efa.links || []).length > 0);
+  return res.programas.filter(p => normTexto_(p.modelo) !== 'control' && normTexto_(p.modelo) !== 'cuadernillos' && (p.efa.links || []).length > 0);
 }
 
 function correoDe_(tipo, res, progs, enc, ctx) {

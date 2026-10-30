@@ -64,5 +64,17 @@ check('new cases chosen: SIP exception, REL without Test', informe.includes('SIP
 check('schools without a Test grade get no student rows (their Test tab stays empty, EFA only)', ['77777', '92222'].every(rbd => {
   const r = post({ rbd, clave: claves[rbd] }); return r.programas.every(p => !p.test.niveles.length && p.efa.total > 0); }));
 check('rows land in a "Colegio (RBD)" column too (SurveyMonkey import header)', JSON.stringify(ctx.filaPorEncabezado_(['Form', 'Nivel', 'Colegio (RBD)'], { Form: 'X', Nivel: '4° básico', Colegio: 'C - N - 1' }, () => 0)) === JSON.stringify(['X', '4° básico', 'C - N - 1']));
+// Sostenedor filter (30-10-2026): REL Cuadernillos only for SIP schools
+sheets['SF'].splice(5, 0, sfRow(94444, 'Lago Falso - Colegio Cuadernos Dos - 94444', 'Religión', 'Cuadernillos', false, '', 2024, range(6,9,[25,1])).concat(['Fundación Otra']));
+sheets['Contraseñas'].push([94444,'lll944']);
+sheets['Formularios'][0].push('Sostenedor');
+const fCuad = sheets['Formularios'].find(r => r[1] === 'REL Cuadernillos');
+fCuad[8] = 'https://s.example/efa-rel-cuad?rbd={rbd}&colegio={colegio}&comuna={comuna}'; fCuad[9] = 'Instrucción Primaria';
+const dS = ctx.cargarDatos_(), relDe = rbd => ctx.panel_(rbd, dS, ctx.reloj_()).programas.find(p => p.programa === 'rel');
+check('Sostenedor column: the REL Cuadernillos link reaches the SIP school only; other rows unaffected', relDe('93333').efa.links.length === 1 && /rbd=93333/.test(relDe('93333').efa.links[0].link)
+  && relDe('94444').efa.links.length === 0 && post({ corto: '94444-REL-Cuadernillos', encuesta: 'efa' }).error === 'link' && post({ corto: '93333-REL-Cuadernillos', encuesta: 'efa' }).ok === true
+  && relDe('55555').efa.links.length === 1);
+check('automatic EFA email leaves Cuadernillos out (their email goes by hand)', ctx.programasConEfa_(ctx.panel_('93333', dS, ctx.reloj_())).length === 0
+  && ctx.programasConEfa_(ctx.panel_('55555', dS, ctx.reloj_())).length === 1);
 console.log(ctx.revisarFormularios());
 `);
