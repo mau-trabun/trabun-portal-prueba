@@ -170,6 +170,9 @@ check('ASE docentes grouped: implemented ∪ declared, null group last', dn === 
 check('EFA total = responses after dedup, 2 roles = 2 (5)', ase.efa.total === 5 && ase.efa.total === ase.efa.secciones.reduce((a, s) => a + s.r, 0));
 check('ASE docentes grades carry SF CxN as cursos (2; null outside/no grade)', sec('docentes').niveles.every(g => g.registrado ? g.cursos === 2 : g.cursos === null));
 check('REL docentes carry declared grades', JSON.stringify(rel.efa.secciones[2].personas.map(x => x.niveles)) === JSON.stringify([['6° básico']]) && sec('direccion').personas.every(x => !('niveles' in x)));
+check('declared grades: regular "NT1, 5° básico" and EDI "NT1: A, B | 1° básico: A, B" (classes ignored, no repeats)',
+  JSON.stringify(ctx.nivelesDeTexto_('NT1, 5° básico')) === '[0,6]' && JSON.stringify(ctx.nivelesDeTexto_('NT1: A, B | NT2: A, B | 1° básico: A, B | 2° básico: A')) === '[0,1,2,3]'
+  && ctx.nivelesDeTexto_('-').length === 0 && ctx.nivelesDeTexto_('').length === 0 && JSON.stringify(ctx.nivelesDeTexto_('I° medio: A | I° medio: B')) === '[10]');
 check('REL docentes flat list', Array.isArray(rel.efa.secciones[2].personas) && !rel.efa.secciones[2].niveles);
 check('2026 EFA role options → section + short label (REL, ASE, EDI wordings; leading "Soy" ignored; unknown → Líderes)', [
   ['Director/a del establecimiento', 'direccion', 'Director/a'],

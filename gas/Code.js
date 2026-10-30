@@ -320,10 +320,21 @@ function leerRespuestasEfa_(formularios) {
         rol,
         rolCorto: rolEfa_(rol).corto,
         secciones: rolEfa_(rol).secciones,
-        niveles: String(primero_(r, c.niveles)).split(',').map(nivelIdx_).filter(n => n >= 0),
+        niveles: nivelesDeTexto_(primero_(r, c.niveles)),
       };
     })
     .filter(x => x.rbd);
+}
+
+// Grades a respondent declared. Regular surveys: "NT1, 5° básico". EDI surveys add the classes:
+// "NT1: A, B | 1° básico: A, B" → the grade is the text before ":" (letters are ignored; they fail the exact match).
+function nivelesDeTexto_(v) {
+  const out = [];
+  String(v == null ? '' : v).split(/[|,]/).forEach(t => {
+    const i = nivelIdx_(t.split(':')[0]);
+    if (i >= 0 && out.indexOf(i) < 0) out.push(i);
+  });
+  return out;
 }
 
 // Response Form label → program, via its Formularios row (so labels like "EFA_EDI" work);

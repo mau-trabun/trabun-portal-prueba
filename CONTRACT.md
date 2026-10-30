@@ -76,6 +76,8 @@ Header row typed by hand. **Source (07-10-2026): SurveyMonkey, not Google Forms*
 Same import pattern as EFS.
 
 | Form | Fecha | Nombre | Apellido | Correo | Colegio | Rol | Niveles |
+
+**2026 import (30-10-2026):** the compiled SurveyMonkey Sheet (ID in memory only) has one tab per survey (9: ASE ×3, EDI Cohorte 1/2, REL ×3, REL Cuadernillos), header in row 1. `Respuestas EFA` A2 holds one `ARRAYFORMULA(LET(… VSTACK(IFERROR(LET(IMPORTRANGE… FILTER … HSTACK…)))))` block per tab (generated from the headers; column positions differ by tab): Form = the `Formularios` label, Fecha = End Date, Nombre = Primer Nombre, Apellido = Primer + Segundo Apellido, Correo, Colegio = the `rbd` custom variable, Rol, Niveles, plus column `RUN` (EDI only, for the ~2-week "X of Y"; not read yet). EDI grades come as "NT1: A, B | 1° básico: A" (`nivelesDeTexto_()` keeps the grade before ":").
 |---|---|---|---|---|---|---|---|
 
 - `Fecha` is a date cell or ISO text.
