@@ -106,14 +106,14 @@ check('Niveles sin docentes: implemented grades with no docente (short labels)',
 check('header notes: what Contactos SF, Respuestas, Sin rol, roles, Otros líderes and the grade block mean',
   /^Contactos vigentes en Salesforce/.test(notaEnc('Contactos SF')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos SF'))
   && /No se muestran: 1 de un programa Control, 1 de un RBD que no está en SF \\(pruebas incluidas\\), 1 de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
-  && /no acepta participar del estudio/.test(notaEnc('Sin rol declarado')) && /suma de los roles puede superar Respuestas/.test(notaEnc('Director/a resp.'))
+  && notaEnc('Sin rol declarado') === 'Respuestas que no indican rol: cuentan en Respuestas, no en ningún rol.' && /suma de los roles puede superar Respuestas/.test(notaEnc('Director/a resp.'))
   && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico doc.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
 check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '6 respuestas de 5 personas: 1 respondió con más de un rol (cada rol es una respuesta).\\nSe descartó 1 envío repetido (mismo correo y rol); cuenta el más reciente.');
 check('note on Respuestas: "todos los roles", "ambos roles", unknown role, before the opening',
   nota(11111, 'REL', 'Respuestas') === '1 respuesta «Cumplo todos los roles» cuenta en Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.\\n'
   + '1 respuesta «Encargado/a y Mentor/a» cuenta en ambos roles; en Respuestas, una vez.\\nRol no reconocido «Inspector/a general»: cuenta en Otros líderes.\\n'
   + '1 respuesta anterior a la apertura (02-11-2026): posibles pruebas.');
-check('note: no role outside EFA-EDI is flagged; inside EFA-EDI it is not', /Fuera de EFA-EDI/.test(nota(11111, 'ASE', 'Sin rol declarado')) && !nota(22222, 'ASE', 'Sin rol declarado'));
+check('note: no role outside EFA-EDI is flagged; inside EFA-EDI it is not', /siempre lo pide/.test(nota(11111, 'ASE', 'Sin rol declarado')) && !nota(22222, 'ASE', 'Sin rol declarado'));
 check('note on Docentes resp.: several grades and no grade; merged with another note on the same cell', nota(11111, 'ASE', 'Docentes resp.') === 'Docentes: 3. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno; 1 sin nivel declarado.'
   && nota(22222, 'ASE', 'Docentes resp.') === '1 sobre lo esperado (esperado: 1).\\nDocentes: 2. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno.'); // two notes on one cell: merged
 check('notes per role: above what SF has; no SF contact with the role; no Encargado/a in SF',

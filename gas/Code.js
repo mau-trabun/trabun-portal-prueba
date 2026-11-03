@@ -941,7 +941,7 @@ function seguimientoEfa_(d, s, reloj) {
   sinColegio ? pl(sinColegio, 'contacto no tiene colegio en Salesforce y no se puede asignar.', 'contactos no tienen colegio en Salesforce y no se pueden asignar.') : '']);
   nota(2, col('Respuestas'), ['Respuestas después de quitar envíos repetidos (mismo correo y rol; cuenta el más reciente). Cada rol es una respuesta.',
     noMuestran.length ? 'No se muestran: ' + noMuestran.join(', ') + '.' : '']);
-  nota(2, col('Sin rol declarado'), ['Respuestas sin rol: cuentan en Respuestas, no en ningún rol. Solo ocurre en EFA-EDI, cuando la persona no acepta participar del estudio (la encuesta termina antes de la pregunta de rol).']);
+  nota(2, col('Sin rol declarado'), ['Respuestas que no indican rol: cuentan en Respuestas, no en ningún rol.']);
   nota(2, cRol, ['Cada respuesta cuenta en todos los roles que declara (p. ej. «Encargado/a y Mentor/a» en ambos), así que la suma de los roles puede superar Respuestas. esp. = contactos de Salesforce con ese rol.']);
   nota(2, cRol + 9, ['Otro/a líder y, en EFA-EDI, Equipo Directivo / Convivencia Escolar (en el portal aparece en Dirección).']);
   nota(2, cNiv, ['ASE: niveles implementados sin respuestas de docentes.']);
@@ -976,7 +976,7 @@ function seguimientoEfa_(d, s, reloj) {
       desconocidos.map(t => `Rol no reconocido «${t}»: cuenta en Otros líderes.`).join('\n'),
       antes ? `${pl(antes, 'respuesta anterior', 'respuestas anteriores')} a la apertura (${ddmm(abre)}): posibles pruebas.` : '',
       !p.efa.links.length ? 'Sin link EFA en Formularios para este programa.' : '']);
-    if (sinRol && !sp.edi) nota(fila, col('Sin rol declarado'), ['Fuera de EFA-EDI la encuesta siempre pide el rol: revisa estas respuestas.']);
+    if (sinRol && !sp.edi) nota(fila, col('Sin rol declarado'), ['Respuestas sin rol en una encuesta que siempre lo pide: revísalas.']);
     if (!s.enviadosEfa[f.rbd] && normTexto_(sp.modelo) === 'cuadernillos') nota(fila, col('Correo enviado'), ['Cuadernillos: el correo de la EFA se envía a mano.']);
 
     // Per role: above or without what SF has
