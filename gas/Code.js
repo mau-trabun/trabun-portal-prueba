@@ -1063,11 +1063,11 @@ function seguimientoEfa_(d, s, reloj) {
     bloques.forEach(b => {
       t.push([]);
       if (b.titulo) t.push(['', b.titulo]);
-      t.push(['', b.etiqueta].concat(SEG_EFA_SUMA, SEG_ROLES_EFA.map(r => '% Avance ' + r[1])));
+      t.push(['', b.etiqueta].concat(b.columnas || SEG_EFA_SUMA.concat(SEG_ROLES_EFA.map(r => '% Avance ' + r[1]))));
       b.filas.forEach(g => {
         const sr = g.filas.reduce((n, f) => n + f.sinRol, 0);
-        if (sr) notasR.push([t.length, cResp, sinRolTexto(sr)]);
-        t.push(['', g.nombre].concat(sumar(g.filas)));
+        if (sr && !b.valores) notasR.push([t.length, cResp, sinRolTexto(sr)]);
+        t.push(['', g.nombre].concat((b.valores || sumar)(g.filas)));
       });
     });
     t.push([], ['', pie]);
@@ -1091,6 +1091,16 @@ function seguimientoEfa_(d, s, reloj) {
   const nombreG = k => k.slice(k.indexOf('|') + 1);
   const bloquesP = [{ titulo: 'Implementaciones por grupo', etiqueta: 'Grupo',
     filas: claves.map(k => ({ nombre: nombreG(k), filas: porGrupo[k] })).concat([{ nombre: 'Total', filas }]) }];
+  // EFA-EDI consents by cohort (Mau 03-11-2026): a response without a role in EFA-EDI = negative consent (the survey
+  // ends before the role). Same columns as the other tables up to F, so "%" sits in a percent column.
+  const edi = claves.filter(k => porGrupo[k][0].sp.edi);
+  if (edi.length) bloquesP.push({ titulo: 'EFA-EDI: consentimientos por cohorte', etiqueta: 'Cohorte',
+    columnas: ['Implementaciones', 'Respuestas EFA-EDI', 'Consentimientos negativos', '% de consentimientos negativos'],
+    valores: grupo => {
+      const r = grupo.reduce((t, f) => t + f.vig.length, 0), neg = grupo.reduce((t, f) => t + f.sinRol, 0);
+      return [grupo.length, r, neg, r ? Math.round(neg / r * 1000) / 1000 : ''];
+    },
+    filas: edi.map(k => ({ nombre: nombreG(k), filas: porGrupo[k] })).concat(edi.length > 1 ? [{ nombre: 'Total EFA-EDI', filas: [].concat.apply([], edi.map(k => porGrupo[k])) }] : []) });
   claves.forEach(k => {
     const porModelo = agrupar_(porGrupo[k], f => f.sp.modelo || '');
     bloquesP.push({ titulo: `Implementaciones ${nombreG(k)} por modelo`, etiqueta: 'Modelo',

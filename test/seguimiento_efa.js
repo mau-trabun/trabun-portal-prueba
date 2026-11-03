@@ -165,7 +165,7 @@ check('Por JdP: one row per JdP (sorted) + Total; counts = sums of Resumen rows,
 })());
 check('Por programa: first table by group (ASE sin EDI, ASE EDI by cohort, REL, Total), then one table per group by modelo with its Total', (() => {
   const grp = x => (x.Programa === 'ASE' ? (x.EDI ? 'ASE EDI · cohorte 1 (2025)' : 'ASE sin EDI') : 'REL'); // fixture EDI school: Año inicio 2025
-  const [g0, ...resto] = BP;
+  const [g0, ...otras] = BP, resto = otras.filter(b => !/^EFA-EDI/.test(b.titulo));
   return TP[2][1] === 'Resumen de respuestas por Programa y Modelo · EFA 2026'
     && g0.titulo === 'Implementaciones por grupo' && g0.enc[1] === 'Grupo' && g0.filas.map(g => g.Grupo).join() === 'ASE sin EDI,ASE EDI · cohorte 1 (2025),REL,Total'
     && g0.filas.slice(0, -1).every(g => cuadra(g, filasR.filter(x => grp(x) === g.Grupo))) && cuadra(g0.filas[3], filasR)
@@ -177,8 +177,27 @@ check('Por programa: first table by group (ASE sin EDI, ASE EDI by cohort, REL, 
     })
     && /cohorte 1 = año de inicio 2025, cohorte 2 = 2026\\.$/.test(TP[TP.length - 1][1]);
 })());
+check('Por programa: EFA-EDI consents by cohort after the group table: responses, negative consents (no role), % in column F', (() => {
+  const b = BP[1], f = b.filas, edi = filasR.filter(x => x.EDI);
+  return b.titulo === 'EFA-EDI: consentimientos por cohorte'
+    && b.enc.join('|') === '|Cohorte|Implementaciones|Respuestas EFA-EDI|Consentimientos negativos|% de consentimientos negativos'
+    && f.length === 1 && f[0].Cohorte === 'ASE EDI · cohorte 1 (2025)' && f[0].Implementaciones === edi.length
+    && f[0]['Respuestas EFA-EDI'] === sumaR(edi, 'Respuestas') && f[0]['Consentimientos negativos'] === 1
+    && f[0]['% de consentimientos negativos'] === Math.round(1 / sumaR(edi, 'Respuestas') * 1000) / 1000
+    && !out.notas['Por programa'].some(([r]) => r === f[0]._fila);
+})());
+check('EFA-EDI consents: one row per cohort + Total EFA-EDI when there are two cohorts; no table without EDI', (() => {
+  const t = (dd, ss) => bloques(ctx.seguimientoEfa_(dd, ss, reloj).tabs['Por programa']).find(b => /^EFA-EDI/.test(b.titulo));
+  const sf = Object.assign({}, d.sf), f = Object.assign({}, sf['22222']);
+  f.programas = Object.assign({}, f.programas, { ase: Object.assign({}, f.programas.ase, { anioInicio: 2026 }) });
+  const dos = t(Object.assign({}, d, { sf: Object.assign({}, sf, { '22222': f, '99999': sf['22222'] }) }), s);
+  const sinEdi = t(Object.assign({}, d, { sf: Object.assign({}, sf, { '22222': Object.assign({}, f, { programas: Object.assign({}, f.programas, { ase: Object.assign({}, f.programas.ase, { edi: false }) }) }) }) }), s);
+  const tot = dos && dos.filas[2];
+  return !!dos && dos.filas.map(g => g.Cohorte).join() === 'ASE EDI · cohorte 1 (2025),ASE EDI · cohorte 2 (2026),Total EFA-EDI'
+    && tot.Implementaciones === 2 && tot['Respuestas EFA-EDI'] === 4 && tot['Consentimientos negativos'] === 1 && tot['% de consentimientos negativos'] === 0.25 && !sinEdi;
+})());
 check('summary tabs: free layout, % columns (F–J) as percent; no bands', ['Por JdP', 'Por programa'].every(n => out.formato[n].libre === true
-  && out.formato[n].pct.join() === '5,6,7,8,9' && !out.formato[n].gris && out.tabs[n].every(r => r.slice(5, 10).every(v => v === '' || typeof v === 'number' || /^% Avance /.test(v)))));
+  && out.formato[n].pct.join() === '5,6,7,8,9' && !out.formato[n].gris && out.tabs[n].every(r => r.slice(5, 10).every(v => v === '' || typeof v === 'number' || /^% /.test(v)))));
 check('summary tabs: no-role count only as a note on Respuestas of the rows that have it (Total included)', (() => {
   const n = out.notas['Por JdP'];
   return !TJ.some(r => r.some(v => /sin rol/i.test(v))) && n.length >= 1 && n.every(([r, c, x]) => c === 4 && TJ[r][4] >= 1
