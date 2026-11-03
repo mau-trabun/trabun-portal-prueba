@@ -106,6 +106,11 @@ delete cacheStore['intentos_11111'];
 const r = post({rbd:' 11111.0 ', clave:'aaa111 '});
 check('login ok with normalized rbd/clave', r.ok === true && r.colegio.nombre === 'Colegio Los Aromos' && r.colegio.comuna === 'Villa Ficticia');
 check('contacto general', r.contacto === 'evaluacion@fundaciontrabun.cl');
+{
+  const d = ctx.cargarDatos_();
+  const conAviso = ctx.panel_('11111', Object.assign({}, d, { cfg: Object.assign({}, d.cfg, { aviso_portal: '  Aviso de prueba.\nSegunda línea.  ' }) }), ctx.reloj_());
+  check('aviso_portal: blank by default, trimmed text when set', r.aviso === '' && conAviso.aviso === 'Aviso de prueba.\nSegunda línea.');
+}
 check('phases computed (Config dates as Date and dd-mm-yyyy)', r.encuestas.test.abre === '2026-10-01' && r.encuestas.efa.abre === '2026-11-02' && r.encuestas.efa.fase !== null);
 const ase = r.programas.find(p=>p.programa==='ase'), rel = r.programas.find(p=>p.programa==='rel');
 check('ASE test grades from Formularios ∩ implemented', JSON.stringify(ase.test.nivelesTest) === JSON.stringify(['4° básico','5° básico','6° básico','7° básico','8° básico','I° medio','II° medio','III° medio','IV° medio']));

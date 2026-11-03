@@ -360,6 +360,7 @@ function panel_(rbd, d, reloj) {
     generado: reloj.generado,
     colegio: { rbd, nombre: col.nombre, comuna: col.comuna },
     contacto: String((ase && ase.edi ? cfg.contacto_edi : cfg.contacto_general) || CONTACTO_DEFECTO).trim(),
+    aviso: String(cfg.aviso_portal == null ? '' : cfg.aviso_portal).trim(), // Config notice for every school ('' = none)
     studentId,
     encuestas: {
       test: ventana_(cfg.test_abre, cfg.test_cierra, reloj.hoy),

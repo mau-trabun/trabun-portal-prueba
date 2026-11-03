@@ -38,6 +38,7 @@ Grade suffixes: `NT1, NT2, 1º, 2º, 3º, 4º, 5º, 6º, 7º, 8º, I, II, III, I
 | `student_id` | `nombre` \| `numero` |
 | `contacto_general` | `evaluacion@fundaciontrabun.cl` |
 | `contacto_edi` | `consultas_edi@fundaciontrabun.cl` |
+| `aviso_portal` | optional text shown to every school at the top of the panel (plain text, line breaks kept); blank or missing = no notice. Cloud Run picks a change up with the next snapshot (~2 min) |
 
 ### `Formularios` (one row per form)
 | Encuesta | Form | Programa | EDI | Año inicio | Modelo | Desde | Hasta | Link |
@@ -197,6 +198,7 @@ A Google Sheet outside the 2026 Sheet (which holds claves and emails), shared wi
   "generado": "2026-10-20T14:03:00-03:00",
   "colegio": { "rbd": "12345", "nombre": "Colegio Ficticio", "comuna": "Comuna Ficticia" },
   "contacto": "evaluacion@fundaciontrabun.cl",
+  "aviso": "",
   "studentId": "nombre",
   "encuestas": {
     "test": { "abre": "2026-10-13", "cierra": "2026-11-20", "fase": "open", "diasRestantes": 31 },
