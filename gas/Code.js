@@ -820,6 +820,8 @@ function seguimiento_(d, s, reloj) {
 // Counts only, never names or emails.
 
 const SEG_EFA_TAB = 'Resumen';
+const SEG_EFA_JDP = 'Por JdP', SEG_EFA_PROG = 'Por programa'; // sums of Resumen rows (2025 tracker's Resumen JdP / Resumen Programa)
+const SEG_EFA_SUMA = ['Implementaciones', 'Impl. con al menos 1 respuesta', 'Contactos SF', 'Respuestas'];
 // SF report "Contactos EFA '26 (seguimiento)" through the Salesforce connector (daily). Cloud Run downloads only these
 // columns: Email only to spot repeated contacts, never written. SF labels the role field "Implementacióon" (typo).
 const TAB_CONTACTOS_EFA = 'Contactos EFA';
@@ -833,7 +835,7 @@ const ROLES_SEG_EFA = { // ROLES_EFA short label → tracker roles; an unknown o
   'Otro/a líder': ['otros'], 'Docente': ['docente'],
 };
 const SEG_EFA = ['RBD', 'Colegio', 'Programa', 'Modelo', 'EDI', 'Jefe/a de Proyecto', 'Coordinador/a', 'Correo enviado',
-  'Ingresos desde la apertura', 'Último ingreso', 'Compartió la EFA', 'Contactos SF', 'Respuestas', 'Sin rol declarado'];
+  'Ingresos desde la apertura', 'Último ingreso', 'Compartió la EFA', 'Contactos SF', 'Respuestas'];
 
 function leerContactosEfa_() {
   const t = leerTabla_(TAB_CONTACTOS_EFA);
@@ -941,7 +943,6 @@ function seguimientoEfa_(d, s, reloj) {
   sinColegio ? pl(sinColegio, 'contacto no tiene colegio en Salesforce y no se puede asignar.', 'contactos no tienen colegio en Salesforce y no se pueden asignar.') : '']);
   nota(2, col('Respuestas'), ['Respuestas después de quitar envíos repetidos (mismo correo y rol; cuenta el más reciente). Cada rol es una respuesta.',
     noMuestran.length ? 'No se muestran: ' + noMuestran.join(', ') + '.' : '']);
-  nota(2, col('Sin rol declarado'), ['Respuestas que no indican rol: cuentan en Respuestas, no en ningún rol.']);
   nota(2, cRol, ['Cada respuesta cuenta en todos los roles que declara (p. ej. «Encargado/a y Mentor/a» en ambos), así que la suma de los roles puede superar Respuestas. esp. = contactos de Salesforce con ese rol.']);
   nota(2, cRol + 9, ['Otro/a líder y, en EFA-EDI, Equipo Directivo / Convivencia Escolar (en el portal aparece en Dirección).']);
   nota(2, cNiv, ['ASE: niveles implementados sin respuestas de docentes.']);
@@ -950,6 +951,8 @@ function seguimientoEfa_(d, s, reloj) {
   const prog = p => (p.programa === 'ase' ? 'ASE' : 'REL');
   // SurveyMonkey writes "-" for an unanswered question (EFA-EDI without consent ends before the role): no role
   const rolSeg = x => (/^[\s\-–—]*$/.test(x.rol || '') ? null : x.rolCorto);
+  // never says why (Mau 03-11-2026): only the count, in the Respuestas note
+  const sinRolTexto = n => (n ? `${pl(n, 'respuesta sin rol: cuenta', 'respuestas sin rol: cuentan')} en Respuestas totales, pero no en la desagregación por rol.` : '');
   filas.forEach(f => {
     const { p, sp, vig } = f;
     const fila = tab.length;
@@ -960,6 +963,7 @@ function seguimientoEfa_(d, s, reloj) {
     const lista = contactos ? contactos[f.rbd + '|' + p.programa] || [] : null;
     if (lista) SEG_ROLES_EFA.forEach(([k]) => { e[k] = lista.filter(x => x.roles.indexOf(k) >= 0).length; });
     const sinRol = vig.filter(x => !rolSeg(x)).length;
+    Object.assign(f, { r, e, sinRol, nContactos: lista ? lista.length : '' }); // for Por JdP / Por programa
 
     // Respuestas: why the numbers don't add up
     const conCorreo = vig.filter(x => x.correo), personas = new Set(conCorreo.map(x => x.correo)).size + vig.length - conCorreo.length;
@@ -969,6 +973,7 @@ function seguimientoEfa_(d, s, reloj) {
     const antes = abre ? vig.filter(x => x.fecha != null && dia(x.fecha) < abre).length : 0;
     const repetidos = f.resps.length - vig.length;
     nota(fila, col('Respuestas'), [
+      sinRolTexto(sinRol) + (sinRol && !sp.edi ? ' La encuesta siempre pide el rol: revísalas.' : ''),
       vig.length > personas ? `${pl(vig.length, 'respuesta', 'respuestas')} de ${pl(personas, 'persona', 'personas')}: ${pl(vig.length - personas, 'respondió', 'respondieron')} con más de un rol (cada rol es una respuesta).` : '',
       repetidos ? `Se ${repetidos === 1 ? 'descartó 1 envío repetido' : 'descartaron ' + miles(repetidos) + ' envíos repetidos'} (mismo correo y rol); cuenta el más reciente.` : '',
       todos ? `${pl(todos, 'respuesta «Cumplo todos los roles» cuenta', 'respuestas «Cumplo todos los roles» cuentan')} en Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.` : '',
@@ -976,7 +981,6 @@ function seguimientoEfa_(d, s, reloj) {
       desconocidos.map(t => `Rol no reconocido «${t}»: cuenta en Otros líderes.`).join('\n'),
       antes ? `${pl(antes, 'respuesta anterior', 'respuestas anteriores')} a la apertura (${ddmm(abre)}): posibles pruebas.` : '',
       !p.efa.links.length ? 'Sin link EFA en Formularios para este programa.' : '']);
-    if (sinRol && !sp.edi) nota(fila, col('Sin rol declarado'), ['Respuestas sin rol en una encuesta que siempre lo pide: revísalas.']);
     if (!s.enviadosEfa[f.rbd] && normTexto_(sp.modelo) === 'cuadernillos') nota(fila, col('Correo enviado'), ['Cuadernillos: el correo de la EFA se envía a mano.']);
 
     // Per role: above or without what SF has
@@ -1002,9 +1006,9 @@ function seguimientoEfa_(d, s, reloj) {
       nota(fila, col('Contactos SF'), [
         !lista.length ? 'Sin contactos en Salesforce para esta implementación.' : '',
         mismoRol ? `${pl(mismoRol, 'correo aparece', 'correos aparecen')} más de una vez con el mismo rol: ${mismoRol === 1 ? 'cuenta' : 'cuentan'} cada vez. Si es la misma persona, corrígelo en Salesforce.` : '',
-        unoSinRol ? `${pl(unoSinRol, 'correo aparece', 'correos aparecen')} dos veces, una sin rol. Si es la misma persona, corrígelo en Salesforce.` : '',
+        unoSinRol ? `${pl(unoSinRol, 'correo aparece', 'correos aparecen')} dos veces, una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.` : '',
         distintos.length ? `${pl(distintos.length, 'correo tiene', 'correos tienen')} dos roles en filas distintas (${combos.join('; ')}): ${distintos.length === 1 ? 'cuenta' : 'cuentan'} en ambos. Si no corresponde, corrígelo en Salesforce.` : '',
-        sinRolSF ? `${pl(sinRolSF, 'contacto sin rol', 'contactos sin rol')} en Salesforce: no ${sinRolSF === 1 ? 'cuenta' : 'cuentan'} en ningún esperado.` : '',
+        sinRolSF ? `${pl(sinRolSF, 'contacto', 'contactos')} sin Rol en la Implementación en Salesforce: no ${sinRolSF === 1 ? 'cuenta' : 'cuentan'} en ningún esperado. Complétalo en Salesforce.` : '',
         enOtro ? `${pl(enOtro, 'contacto también aparece', 'contactos también aparecen')} en otro colegio (RBD ${otros.join(', ')}).` : '']);
     }
 
@@ -1030,7 +1034,7 @@ function seguimientoEfa_(d, s, reloj) {
     }));
     tab.push([Number(f.rbd), f.col.nombre || '', prog(p), sp.modelo || '', sp.edi ? 'SÍ' : '', sp.jefeProyecto || '', sp.coordinador || '',
       fecha(s.enviadosEfa[f.rbd]), f.u.ingresos, conFormato(f.u.ultimo, true), f.u.acciones[p.programa].join(', '),
-      lista ? lista.length : '', vig.length, sinRol]
+      lista ? lista.length : '', vig.length]
       .concat([].concat.apply([], SEG_ROLES_EFA.map(([k]) => [r[k], e[k], lista ? pct(r[k], e[k]) : ''])))
       .concat([grupos.filter(n => n.registrado && !n.r).map(n => corto(n.nivel)).join(', ')], celdas));
   });
@@ -1041,6 +1045,51 @@ function seguimientoEfa_(d, s, reloj) {
   tabs[SEG_EFA_TAB] = tab;
   notasT[SEG_EFA_TAB] = notas;
   formato[SEG_EFA_TAB] = { gris };
+
+  // Por JdP / Por programa: sums of Resumen rows; % = group responses ÷ group expected (not an average of schools)
+  const sumar = grupo => {
+    const suma = k => grupo.reduce((t, f) => t + (typeof f[k] === 'number' ? f[k] : 0), 0);
+    const hayE = !!s.contactos;
+    return [grupo.length, grupo.filter(f => f.vig.length).length, hayE ? suma('nContactos') : '', grupo.reduce((t, f) => t + f.vig.length, 0)]
+      .concat([].concat.apply([], SEG_ROLES_EFA.map(([k]) => {
+        const rr = grupo.reduce((t, f) => t + f.r[k], 0), ee = grupo.reduce((t, f) => t + (typeof f.e[k] === 'number' ? f.e[k] : 0), 0);
+        return [rr, hayE ? ee : '', hayE ? pct(rr, ee) : ''];
+      })));
+  };
+  const resumen = (nombre, claves, grupos, notaEnc) => {
+    const enc = claves.concat(SEG_EFA_SUMA, [].concat.apply([], SEG_ROLES_EFA.map(r => [r[1] + ' resp.', r[1] + ' esp.', r[1] + ' %'])));
+    const t = [tab[0], tab[1], enc];
+    const c0 = claves.length + SEG_EFA_SUMA.length, notasR = [];
+    grupos.forEach(g => {
+      if (!g.filas) return t.push(enc.map(() => '')); // blank row between blocks
+      const sr = g.filas.reduce((n, f) => n + f.sinRol, 0);
+      if (sr) notasR.push([t.length, c0 - 1, sinRolTexto(sr)]);
+      t.push(g.etiqueta.concat(sumar(g.filas)));
+    });
+    tabs[nombre] = t;
+    notasT[nombre] = [[2, c0, 'Suma de las filas de Resumen. % = respuestas del grupo ÷ esperados del grupo (no es el promedio de los colegios).']].concat(notaEnc || [], notasR);
+    formato[nombre] = { gris: [].concat.apply([], SEG_ROLES_EFA.map((_, j) => (j % 2 ? [] : [c0 + 3 * j, c0 + 3 * j + 1, c0 + 3 * j + 2]))) };
+  };
+  const porJdp = agrupar_(filas, f => f.sp.jefeProyecto || '');
+  resumen(SEG_EFA_JDP, ['Jefe/a de Proyecto'], Object.keys(porJdp).sort(compararTexto_)
+    .map(k => ({ etiqueta: [k || '(sin Jefe/a de Proyecto)'], filas: porJdp[k] })).concat([{ etiqueta: ['Total'], filas }]));
+  // Por programa (Mau 03-11-2026): main block = one row per group + Total; below, each group by modelo.
+  // Groups: ASE sin EDI, ASE EDI by cohort (Año inicio: 2025 = cohorte 1, 2026 = cohorte 2), REL.
+  const grupoP = f => {
+    const pr = prog(f.p), c = f.sp.anioInicio;
+    if (!f.sp.edi) return { orden: pr + '0', nombre: pr === 'ASE' ? 'ASE sin EDI' : pr };
+    return c ? { orden: pr + '1' + c, nombre: `${pr} EDI · cohorte ${c - 2024} (${c})` } : { orden: pr + '1', nombre: pr + ' EDI' };
+  };
+  const porGrupo = agrupar_(filas, f => { const g = grupoP(f); return g.orden + '|' + g.nombre; });
+  const claves = Object.keys(porGrupo).sort();
+  const nombreG = k => k.slice(k.indexOf('|') + 1);
+  const gruposP = claves.map(k => ({ etiqueta: [nombreG(k), ''], filas: porGrupo[k] })).concat([{ etiqueta: ['Total', ''], filas }, {}]);
+  claves.forEach(k => {
+    const porModelo = agrupar_(porGrupo[k], f => f.sp.modelo || '');
+    Object.keys(porModelo).sort(compararTexto_).forEach(m => gruposP.push({ etiqueta: [nombreG(k), m || '(sin modelo)'], filas: porModelo[m] }));
+  });
+  resumen(SEG_EFA_PROG, ['Grupo', 'Modelo'], gruposP,
+    [[2, 0, 'Arriba, cada grupo completo y el total. Abajo, cada grupo por modelo. EDI: cohorte 1 = año de inicio 2025, cohorte 2 = 2026.']]);
   return { tabs, notas: notasT, formato };
 }
 

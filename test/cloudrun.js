@@ -198,7 +198,7 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
     && snapEfa['Correos EFA'][0].join() === 'RBD,Enviado' && !JSON.stringify(snapEfa['Correos EFA']).includes('enc@') && !pedidas.includes('Correos Test') && pedidas.includes('Métricas'));
   const esperadoEfa = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), ctx.reloj_());
   check('EFA tracker written after a snapshot, rows, notes and bands identical to Code.js on Apps Script', escritosEfa.length === 1
-    && Object.keys(escritosEfa[0].tabs).join() === 'Resumen' && JSON.stringify(sinEstado(escritosEfa[0].tabs)) === JSON.stringify(sinEstado(esperadoEfa.tabs))
+    && Object.keys(escritosEfa[0].tabs).join() === 'Resumen,Por JdP,Por programa' && JSON.stringify(sinEstado(escritosEfa[0].tabs)) === JSON.stringify(sinEstado(esperadoEfa.tabs))
     && JSON.stringify(escritosEfa[0].notas) === JSON.stringify(esperadoEfa.notas) && JSON.stringify(escritosEfa[0].formato) === JSON.stringify(esperadoEfa.formato)
     && escritosEfa[0].tabs.Resumen.find(r => r[0] === 11111 && r[2] === 'ASE')[escritosEfa[0].tabs.Resumen[2].indexOf('Docentes esp.')] === 2);
   const n1 = escritos.length;

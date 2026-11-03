@@ -70,10 +70,10 @@ const nota = (rbd, prog, c) => (out.notas['Resumen'].find(([r, j]) => T[r][0] ==
 const notaEnc = c => (out.notas['Resumen'].find(([r, j]) => r === 2 && h[j] === c) || [])[2];
 
 check('one tab, status lines, contract header: base, 5 roles × resp./esp./%, Niveles sin docentes, grade pairs in canonical order',
-  Object.keys(out.tabs).join() === 'Resumen' && T[0][0] === 'Actualizado: 03-11-2026 14:32' && /^Actualización automática cada 2 minutos/.test(T[1][0])
-  && h.slice(0, 14).join('|') === 'RBD|Colegio|Programa|Modelo|EDI|Jefe/a de Proyecto|Coordinador/a|Correo enviado|Ingresos desde la apertura|Último ingreso|Compartió la EFA|Contactos SF|Respuestas|Sin rol declarado'
-  && h.slice(14, 29).join('|') === 'Director/a resp.|Director/a esp.|Director/a %|Encargado/a resp.|Encargado/a esp.|Encargado/a %|Mentor/a resp.|Mentor/a esp.|Mentor/a %|Otros líderes resp.|Otros líderes esp.|Otros líderes %|Docentes resp.|Docentes esp.|Docentes %'
-  && h[29] === 'Niveles sin docentes' && h[30] === '1° básico doc.' && h[31] === '1° básico cursos' && h[h.length - 1] === 'IV° medio cursos' && h.length === 30 + 2 * 12);
+  Object.keys(out.tabs).join() === 'Resumen,Por JdP,Por programa' && T[0][0] === 'Actualizado: 03-11-2026 14:32' && /^Actualización automática cada 2 minutos/.test(T[1][0])
+  && h.slice(0, 13).join('|') === 'RBD|Colegio|Programa|Modelo|EDI|Jefe/a de Proyecto|Coordinador/a|Correo enviado|Ingresos desde la apertura|Último ingreso|Compartió la EFA|Contactos SF|Respuestas'
+  && h.slice(13, 28).join('|') === 'Director/a resp.|Director/a esp.|Director/a %|Encargado/a resp.|Encargado/a esp.|Encargado/a %|Mentor/a resp.|Mentor/a esp.|Mentor/a %|Otros líderes resp.|Otros líderes esp.|Otros líderes %|Docentes resp.|Docentes esp.|Docentes %'
+  && h[28] === 'Niveles sin docentes' && h[29] === '1° básico doc.' && h[30] === '1° básico cursos' && h[h.length - 1] === 'IV° medio cursos' && h.length === 29 + 2 * 12);
 check('rows: school-programs with an EFA link or responses; Control left out', T.length === 6 && !!a && !!rl && !!f && !fila('33333', 'ASE'));
 check('Respuestas = the portal total (dedup email + role)', (() => {
   const p = post({ rbd: '11111', clave: 'aaa111' }).programas, q = post({ rbd: '22222', clave: 'bbb222' }).programas;
@@ -84,8 +84,8 @@ check('responses by role: each counts in every role it declares ("todos" in 3, "
   a['Director/a resp.'] === 1 && a['Mentor/a resp.'] === 1 && a['Docentes resp.'] === 3 && a['Encargado/a resp.'] === 0
   && rl['Encargado/a resp.'] === 2 && rl['Mentor/a resp.'] === 2 && rl['Docentes resp.'] === 3 && rl['Otros líderes resp.'] === 1
   && f['Otros líderes resp.'] === 1 && f['Docentes resp.'] === 2 && f['Director/a resp.'] === 0);
-check('Sin rol declarado: counted in Respuestas, in no role', f['Sin rol declarado'] === 1 && a['Sin rol declarado'] === 1 && rl['Sin rol declarado'] === 0
-  && f['Respuestas'] === 1 + 1 + 2);
+check('no role: no column; counted in Respuestas, in no role, only its count in the Respuestas note', !h.some(k => /sin rol/i.test(k)) && f['Respuestas'] === 1 + 1 + 2
+  && /^1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol\\.$/m.test(nota(22222, 'ASE', 'Respuestas')) && !/sin rol/.test(nota(11111, 'REL', 'Respuestas') || ''));
 check('expected = SF contacts per role, as SF has them (repeats and no-email contacts count; multi-role in each role)',
   a['Contactos SF'] === 9 && a['Director/a esp.'] === 1 && a['Encargado/a esp.'] === 2 && a['Mentor/a esp.'] === 1 && a['Otros líderes esp.'] === 1 && a['Docentes esp.'] === 4
   && rl['Contactos SF'] === 5 && rl['Docentes esp.'] === 2 && rl['Mentor/a esp.'] === 1 && rl['Otros líderes esp.'] === 1 && f['Contactos SF'] === 2 && f['Encargado/a esp.'] === 0);
@@ -103,17 +103,17 @@ check('ASE docentes by grade: count per declared grade, CxN as cursos; outside t
   && a['1° básico doc.'] === 0 && f['5° básico doc.'] === 1 && f['6° básico doc.'] === 1 && f['4° básico doc.'] === 1 && f['1° básico doc.'] === ''
   && rl['5° básico doc.'] === '' && rl['Niveles sin docentes'] === '');
 check('Niveles sin docentes: implemented grades with no docente (short labels)', a['Niveles sin docentes'] === '1°, 2°, 3°, 4°, 7°, 8°' && f['Niveles sin docentes'] === '7°, 8°, I°, II°, III°, IV°');
-check('header notes: what Contactos SF, Respuestas, Sin rol, roles, Otros líderes and the grade block mean',
+check('header notes: what Contactos SF, Respuestas, roles, Otros líderes and the grade block mean',
   /^Contactos vigentes en Salesforce/.test(notaEnc('Contactos SF')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos SF'))
   && /No se muestran: 1 de un programa Control, 1 de un RBD que no está en SF \\(pruebas incluidas\\), 1 de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
-  && notaEnc('Sin rol declarado') === 'Respuestas que no indican rol: cuentan en Respuestas, no en ningún rol.' && /suma de los roles puede superar Respuestas/.test(notaEnc('Director/a resp.'))
+  && !out.notas['Resumen'].some(([r, c, t]) => r === 2 && /sin rol/.test(t)) && /suma de los roles puede superar Respuestas/.test(notaEnc('Director/a resp.'))
   && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico doc.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
-check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '6 respuestas de 5 personas: 1 respondió con más de un rol (cada rol es una respuesta).\\nSe descartó 1 envío repetido (mismo correo y rol); cuenta el más reciente.');
+check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol. La encuesta siempre pide el rol: revísalas.\\n6 respuestas de 5 personas: 1 respondió con más de un rol (cada rol es una respuesta).\\nSe descartó 1 envío repetido (mismo correo y rol); cuenta el más reciente.');
 check('note on Respuestas: "todos los roles", "ambos roles", unknown role, before the opening',
   nota(11111, 'REL', 'Respuestas') === '1 respuesta «Cumplo todos los roles» cuenta en Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.\\n'
   + '1 respuesta «Encargado/a y Mentor/a» cuenta en ambos roles; en Respuestas, una vez.\\nRol no reconocido «Inspector/a general»: cuenta en Otros líderes.\\n'
   + '1 respuesta anterior a la apertura (02-11-2026): posibles pruebas.');
-check('note: no role outside EFA-EDI is flagged; inside EFA-EDI it is not', /siempre lo pide/.test(nota(11111, 'ASE', 'Sin rol declarado')) && !nota(22222, 'ASE', 'Sin rol declarado'));
+check('no role: outside EFA-EDI "revísalas"; inside EFA-EDI only the count, never why', /revísalas/.test(nota(11111, 'ASE', 'Respuestas')) && !/revísalas|consent|acept|estudio/i.test(nota(22222, 'ASE', 'Respuestas')));
 check('note on Docentes resp.: several grades and no grade; merged with another note on the same cell', nota(11111, 'ASE', 'Docentes resp.') === 'Docentes: 3. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno; 1 sin nivel declarado.'
   && nota(22222, 'ASE', 'Docentes resp.') === '1 sobre lo esperado (esperado: 1).\\nDocentes: 2. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno.'); // two notes on one cell: merged
 check('notes per role: above what SF has; no SF contact with the role; no Encargado/a in SF',
@@ -122,9 +122,9 @@ check('notes per role: above what SF has; no SF contact with the role; no Encarg
   && !nota(11111, 'ASE', 'Docentes resp.').includes('sobre lo esperado'));
 check('notes on Contactos SF: repeated email (same role / one without role / two roles), no role, also in another school',
   nota(11111, 'ASE', 'Contactos SF') === '1 correo aparece más de una vez con el mismo rol: cuenta cada vez. Si es la misma persona, corrígelo en Salesforce.\\n'
-  + '1 contacto sin rol en Salesforce: no cuenta en ningún esperado.\\n1 contacto también aparece en otro colegio (RBD 22222).'
-  && nota(11111, 'REL', 'Contactos SF') === '1 correo aparece dos veces, una sin rol. Si es la misma persona, corrígelo en Salesforce.\\n'
-  + '1 correo tiene dos roles en filas distintas («Docente y Mentor/a» y «Otro»): cuenta en ambos. Si no corresponde, corrígelo en Salesforce.\\n1 contacto sin rol en Salesforce: no cuenta en ningún esperado.');
+  + '1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.\\n1 contacto también aparece en otro colegio (RBD 22222).'
+  && nota(11111, 'REL', 'Contactos SF') === '1 correo aparece dos veces, una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.\\n'
+  + '1 correo tiene dos roles en filas distintas («Docente y Mentor/a» y «Otro»): cuenta en ambos. Si no corresponde, corrígelo en Salesforce.\\n1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.');
 check('note on a grade outside the registered ones', nota(11111, 'ASE', 'I° medio cursos') === 'Fuera de lo registrado: SF no tiene este nivel en el programa, pero 1 docente lo declaró.');
 check('gray blocks: Director/a, Mentor/a, Docentes (3 columns each), then every other grade pair',
   out.formato['Resumen'].gris.slice(0, 9).map(c => h[c]).join() === 'Director/a resp.,Director/a esp.,Director/a %,Mentor/a resp.,Mentor/a esp.,Mentor/a %,Docentes resp.,Docentes esp.,Docentes %'
@@ -132,6 +132,45 @@ check('gray blocks: Director/a, Mentor/a, Docentes (3 columns each), then every 
 check('rows have the header width; RBD as a number', T.slice(3).every(r => r.length === h.length) && a.RBD === 11111);
 check('notes point inside the tab (header row or below, column within the header)', out.notas['Resumen'].every(([r, c]) => r >= 2 && r < T.length && c < h.length));
 check('no names or emails anywhere', !/@|Fuentes|Ríos|Ficticio|Acepta|Mella/.test(JSON.stringify(out)));
+const filasR = T.slice(3).map(r => Object.fromEntries(h.map((k, i) => [k, r[i]])));
+const sumaR = (filas, k) => filas.reduce((t, x) => t + (typeof x[k] === 'number' ? x[k] : 0), 0);
+const deTab = n => out.tabs[n].slice(3).map(r => Object.fromEntries(out.tabs[n][2].map((k, i) => [k, r[i]])));
+const J = deTab('Por JdP'), P = deTab('Por programa');
+const cuadra = (g, filas) => g.Implementaciones === filas.length && g['Impl. con al menos 1 respuesta'] === filas.filter(x => x.Respuestas > 0).length
+  && ['Contactos SF', 'Respuestas'].concat([].concat.apply([], ['Director/a', 'Encargado/a', 'Mentor/a', 'Otros líderes', 'Docentes'].map(r => [r + ' resp.', r + ' esp.'])))
+    .every(k => g[k] === sumaR(filas, k));
+check('Por JdP: one row per JdP (sorted) + Total; every number = sum of its Resumen rows',
+  out.tabs['Por JdP'][2].slice(0, 5).join('|') === 'Jefe/a de Proyecto|Implementaciones|Impl. con al menos 1 respuesta|Contactos SF|Respuestas'
+  && J.length === new Set(filasR.map(x => x['Jefe/a de Proyecto'])).size + 1 && J[J.length - 1]['Jefe/a de Proyecto'] === 'Total'
+  && J.slice(0, -1).every(g => cuadra(g, filasR.filter(x => (x['Jefe/a de Proyecto'] || '(sin Jefe/a de Proyecto)') === g['Jefe/a de Proyecto'])))
+  && cuadra(J[J.length - 1], filasR));
+check('Por programa: main block (ASE sin EDI, ASE EDI by cohort, REL, Total), blank row, then each group by modelo; sums of Resumen rows', (() => {
+  const grp = x => (x.Programa === 'ASE' ? (x.EDI ? 'ASE EDI · cohorte 1 (2025)' : 'ASE sin EDI') : 'REL'); // fixture EDI school: Año inicio 2025
+  const arriba = P.slice(0, 4), vacia = P[4], abajo = P.slice(5);
+  return out.tabs['Por programa'][2].slice(0, 3).join('|') === 'Grupo|Modelo|Implementaciones'
+    && arriba.map(g => g.Grupo + '/' + g.Modelo).join() === 'ASE sin EDI/,ASE EDI · cohorte 1 (2025)/,REL/,Total/'
+    && arriba.slice(0, 3).every(g => cuadra(g, filasR.filter(x => grp(x) === g.Grupo))) && cuadra(arriba[3], filasR)
+    && Object.values(vacia).every(v => v === '')
+    && abajo.length === 3 && abajo.every(g => g.Modelo && cuadra(g, filasR.filter(x => grp(x) === g.Grupo && x.Modelo === g.Modelo)))
+    && abajo.map(g => g.Grupo).join() === 'ASE sin EDI,ASE EDI · cohorte 1 (2025),REL';
+})());
+check('summary %: group resp. ÷ group esp. (pooled, not an average of schools)', (() => {
+  const t = J[J.length - 1];
+  return t['Docentes %'] === Math.round(sumaR(filasR, 'Docentes resp.') / sumaR(filasR, 'Docentes esp.') * 1000) / 1000;
+})());
+check('summary tabs: header notes (pooled %, Total rows), gray role blocks, rows at header width',
+  /no es el promedio/.test(out.notas['Por JdP'][0][2]) && out.notas['Por programa'].some(([r, c, t]) => r === 2 && c === 0 && /Abajo, cada grupo por modelo/.test(t) && /cohorte 2 = 2026/.test(t))
+  && out.formato['Por JdP'].gris.slice(0, 3).join() === '5,6,7' && out.formato['Por programa'].gris.slice(0, 3).join() === '6,7,8'
+  && ['Por JdP', 'Por programa'].every(n => out.tabs[n].slice(2).every(r => r.length === out.tabs[n][2].length)));
+check('summary tabs: no-role count only as a note on Respuestas of the rows that have it', (() => {
+  const t = out.tabs['Por JdP'], cR = t[2].indexOf('Respuestas'), n = out.notas['Por JdP'].filter(([r, c]) => r > 2 && c === cR);
+  return !t[2].some(k => /sin rol/i.test(k)) && n.length >= 1 && n.every(([r, , x]) => /^\\d+ respuestas? sin rol: cuentan? en Respuestas totales, pero no en la desagregación por rol\\.$/.test(x) && r < t.length)
+    && n.some(([r]) => t[r][0] === 'Total');
+})());
+check('summary tabs without Contactos EFA: Contactos SF, esp. and % blank', (() => {
+  const t = sinContactos.tabs['Por JdP'], r = t[t.length - 1], c = k => r[t[2].indexOf(k)];
+  return c('Contactos SF') === '' && c('Docentes esp.') === '' && c('Docentes %') === '' && typeof c('Docentes resp.') === 'number';
+})());
 check('EFA responses unreadable → null (keep the previous tracker)', ctx.seguimientoEfa_(Object.assign({}, d, { efa: null }), s, reloj) === null);
 check('the Test tracker is unchanged by the EFA sources', Object.keys(ctx.seguimiento_(d, s, reloj).tabs).join() === 'Resumen,Por curso');
 `);
