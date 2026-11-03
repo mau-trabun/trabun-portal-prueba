@@ -46,7 +46,9 @@ if (require.main === module) {
   if (!id) { console.error('Falta SHEET_ID'); process.exit(1); }
   const origenes = (process.env.ORIGENES || 'https://mau-trabun.github.io,https://portal.fundaciontrabun.cl').split(',').map(s => s.trim());
   const seg = process.env.SEGUIMIENTO_ID; // team tracker Sheet; unset = not written
-  const servicio = crearServicio({ src: fs.readFileSync(CODIGO, 'utf8'), planilla: crearPlanilla(id), seguimiento: seg ? crearSeguimiento(seg) : null });
+  const segEfa = process.env.SEGUIMIENTO_EFA_ID; // EFA team tracker Sheet; unset = not written
+  const servicio = crearServicio({ src: fs.readFileSync(CODIGO, 'utf8'), planilla: crearPlanilla(id),
+    seguimiento: seg ? crearSeguimiento(seg) : null, seguimientoEfa: segEfa ? crearSeguimiento(segEfa) : null });
   crearServidor(servicio, origenes).listen(Number(process.env.PORT) || 8080, () => console.log('portal-api listo'));
 }
 

@@ -80,8 +80,9 @@ function pideFresco(cuerpo) {
 // minEntreMs: at most one Sheet read started per this interval from requests (protects the Sheets API).
 // seguimiento: { escribir(tabs) } for the team tracker (separate Sheet); null = off. Rewritten after every snapshot
 // during Code.js SEG_HORARIO (Santiago time, school hours), otherwise once per clock hour (first snapshot of the hour).
+// seguimientoEfa: same, for the EFA tracker (its own Sheet).
 // ahora: clock, for tests.
-function crearServicio({ src, planilla, seguimiento = null, ahora = () => new Date(), ttlMs = 3 * 60 * 1000, maxEdadMs = 10 * 60 * 1000, frescoMs = 15 * 1000, minEntreMs = 30 * 1000, log = console }) {
+function crearServicio({ src, planilla, seguimiento = null, seguimientoEfa = null, ahora = () => new Date(), ttlMs = 3 * 60 * 1000, maxEdadMs = 10 * 60 * 1000, frescoMs = 15 * 1000, minEntreMs = 30 * 1000, log = console }) {
   let snap = null;      // { titulos: Set, tablas: {tab: values}, leido }
   let datos = null;     // cargarDatos_() result for the current snapshot (or its error)
   let cargando = null;
@@ -99,10 +100,19 @@ function crearServicio({ src, planilla, seguimiento = null, ahora = () => new Da
   const lectura = Object.keys(TABS).filter(k => k !== 'metricas').map(k => TABS[k]);
   const sinFechas = [TABS.respTest]; // the big tab: no date column is read from it
   const columnas = {};
-  if (seguimiento) { // the tracker also needs portal use and the email date: only RBD + Enviado, never the emails
+  // The trackers also need portal use and the email date (only RBD + Enviado, never the emails);
+  // the EFA one, SF contacts without names (Email only to spot repeats)
+  if (seguimiento || seguimientoEfa) lectura.push(TABS.metricas);
+  if (seguimiento) {
     const correos = vm.runInContext('TAB_CORREOS', ctx);
-    lectura.push(TABS.metricas, correos);
+    lectura.push(correos);
     columnas[correos] = ['RBD', 'Enviado'];
+  }
+  if (seguimientoEfa) {
+    const correos = vm.runInContext('TAB_CORREOS_EFA', ctx), contactos = vm.runInContext('TAB_CONTACTOS_EFA', ctx);
+    lectura.push(correos, contactos);
+    columnas[correos] = ['RBD', 'Enviado'];
+    columnas[contactos] = vm.runInContext('COLS_CONTACTOS_EFA', ctx);
   }
   let escribiendo = false;
   let ultimaHoraEscrita = null; // 'yyyy-MM-dd HH' of the last tracker write
@@ -127,16 +137,26 @@ function crearServicio({ src, planilla, seguimiento = null, ahora = () => new Da
     return cargando;
   }
 
-  // Skipped when a write is still running (the next snapshot writes) or responses could not be read (keeps the old tracker)
+  // Skipped when a write is still running (the next snapshot writes) or responses could not be read (keeps the old tracker).
+  // Each tracker on its own: one failing never stops the other.
   async function escribirSeguimiento() {
-    if (!seguimiento || escribiendo || !datos || datos.error) return;
+    if ((!seguimiento && !seguimientoEfa) || escribiendo || !datos || datos.error) return;
     const hora = formatDate(ahora(), TZ, 'yyyy-MM-dd HH');
     const h = Number(hora.slice(-2));
     if ((h < HORARIO.desde || h >= HORARIO.hasta) && hora === ultimaHoraEscrita) return; // off hours: once per hour
     escribiendo = true;
     try {
-      const res = ctx.seguimiento_(datos.valor, ctx.datosSeguimiento_(), ctx.reloj_());
-      if (res) { await seguimiento.escribir(res.tabs, res.notas, res.formato); ultimaHoraEscrita = hora; }
+      const s = ctx.datosSeguimiento_(), reloj = ctx.reloj_();
+      for (const [destino, fn, nombre] of [[seguimiento, 'seguimiento_', 'seguimiento'], [seguimientoEfa, 'seguimientoEfa_', 'seguimiento EFA']]) {
+        if (!destino) continue;
+        try {
+          const res = ctx[fn](datos.valor, s, reloj);
+          if (res) await destino.escribir(res.tabs, res.notas, res.formato);
+        } catch (e) {
+          log.error(nombre + ': ' + e.message);
+        }
+      }
+      ultimaHoraEscrita = hora;
     } catch (e) {
       log.error('seguimiento: ' + e.message);
     } finally {

@@ -1,0 +1,137 @@
+// Tests seguimientoEfa_() + the EFA sources of datosSeguimiento_() (EFA team tracker) on top of the run.js mocks.
+// Fictional schools, people and contacts only. Run from the repo root: node test/seguimiento_efa.js
+const base = require('fs').readFileSync(require('path').join(__dirname, 'run.js'), 'utf8').split("const post =")[0];
+eval(base + `
+const check = (label, cond) => { console.log((cond ? 'PASS ' : 'FAIL ') + label); if (!cond) process.exitCode = 1; };
+const post = body => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }).s);
+ctx.Utilities.formatDate = require('../cloudrun/app').formatDate; // every pattern Code.js uses (the run.js mock knows two)
+const reloj = { hoy: '2026-11-03', generado: '2026-11-03T14:32:00-03:00' };
+const FARO = 'Puerto Inventado - Escuela El Faro - 22222';
+const DOC_ASE = 'Docente que implementa el Programa ASE-Orientación de Trabün';
+
+sheets['Respuestas EFA'].push(
+  ['ASE Semi-intensivo', '2026-11-03T15:00:00', 'Sin', 'Rol', 'sr@ejemplo.cl', AROMOS, '', '-'],                       // no role outside EFA-EDI
+  ['EFA_EDI', '2026-11-03T10:00:00', 'No', 'Acepta', 'na@ejemplo.cl', FARO, '-', '-'],                                  // EDI no consent: SurveyMonkey writes "-" 
+  ['EFA_EDI', '2026-11-03T10:10:00', 'Equipo', 'Directivo', 'ed@ejemplo.cl', FARO, 'Equipo Directivo / Convivencia Escolar.', ''],
+  ['EFA_EDI', '2026-11-03T10:20:00', 'Varios', 'Niveles', 'vn@ejemplo.cl', FARO, 'Soy Docente e implemento el Programa', '5° básico: A, B | 6° básico: A'],
+  ['EFA_EDI', '2026-11-03T10:30:00', 'Un', 'Nivel', 'un@ejemplo.cl', FARO, 'Soy Docente e implemento el Programa', '4° básico: A'],
+  ['REL Consolidado', '2026-11-03T16:10:00', 'Todos', 'Roles', 'tr@ejemplo.cl', AROMOS, 'Cumplo todos los roles: Encargado/a, Mentor/a y Docente', '-'],
+  ['REL Consolidado', '2026-11-03T16:20:00', 'Ambos', 'Roles', 'ar@ejemplo.cl', AROMOS, 'Cumplo ambos roles, es decir, soy Encargado/a y Mentor/a del Programa', '-'],
+  ['REL Consolidado', '2026-11-03T16:30:00', 'Rol', 'Nuevo', 'rn@ejemplo.cl', AROMOS, 'Inspector/a general, en la escuela', '-'],
+  ['REL Consolidado', '2026-10-30T09:00:00', 'Antes', 'Apertura', 'aa@ejemplo.cl', AROMOS, 'Docente que implementa el Programa de Religión de Trabün', '7° básico'],
+  ['ASE Semi-intensivo', '2026-11-03T10:00:00', 'Error', 'Control', 'ec@ejemplo.cl', 'Cerro Falso - Liceo Control - 33333', DOC_ASE, '5° básico'], // Control
+  ['ASE Semi-intensivo', '2026-11-03T10:00:00', 'Fuera', 'SF', 'fs@ejemplo.cl', 'Otra - Escuela Ajena - 55555', DOC_ASE, '5° básico'],       // RBD not in SF
+  ['REL Consolidado', '2026-11-03T10:00:00', 'Sin', 'Programa', 'sp@ejemplo.cl', FARO, 'Docente que implementa el Programa de Religión de Trabün', '5° básico']); // El Faro has no REL
+
+check('no Contactos EFA / Correos EFA tab: null contacts, empty dates, no error', (() => { const s = ctx.datosSeguimiento_(); return s.contactos === null && JSON.stringify(s.enviadosEfa) === '{}'; })());
+const sinContactos = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj);
+
+sheets['Correos EFA'] = [['RBD', 'Colegio', 'Para', 'Enviar', 'Enviado'], ['11111', 'x', 'a@ejemplo.invalid', true, new Date(2026, 10, 2, 8, 5)]];
+sheets['Métricas'].push(
+  ['2026-10-20 10:00:00', 11111, 'ASE,REL', true, true, 'login'],          // before the EFA opened
+  ['2026-11-03 10:00:00', 11111, 'ASE,REL', true, true, 'login'],
+  ['2026-11-03 11:00:00', 11111, 'ASE,REL', true, true, 'login_interno'],  // internal view: never counted
+  ['2026-11-03 10:01:00', 11111, 'ASE', '', '', 'efa_whatsapp'],
+  ['2026-11-03 10:02:00', 11111, 'ASE', '', '', 'efa_qr'],
+  ['2026-11-03 10:03:00', 11111, 'ASE', '', '', 'efa_whatsapp'],           // repeated → once
+  ['2026-11-03 10:04:00', 11111, 'ASE', '', '', 'test_qr'],                // Test share: not listed
+  ['2026-11-03 10:05:00', 11111, 'REL', '', '', 'efa_copiar_link'],
+  ['2026-11-03 10:06:00', 11111, 'REL', '', '', 'efa_qr_interno']);
+// SF report as the connector writes it (names included: Code.js never reads them; Cloud Run never downloads them)
+const contacto = (nombre, tipo, rol, correo) => [nombre, 'Cuenta Ficticia', tipo, 'x', 'False', '', 'x', 'Nombre', 'Ficticio', rol, correo, 'True', ''];
+sheets['Contactos EFA'] = [['Nombre para formulario', 'Account Name', 'Implementación: Record Type', 'Implementación: Modelo', 'Implementación: EDI', 'Año inicio ASE',
+  'Implementación: Nombre de la Implementación', 'First Name', 'Last Name', 'Rol en la Implementacióon', 'Email', 'Vigente 2026', 'Rol en el colegio'],
+  contacto(AROMOS, 'ASE', 'Director/a', 'c1@ejemplo.invalid'),
+  contacto(AROMOS, 'ASE', 'Encargado/a', 'c2@ejemplo.invalid'),
+  contacto(AROMOS, 'ASE', 'Mentor/a y Encargado/a', 'c3@ejemplo.invalid'),
+  contacto(AROMOS, 'ASE', 'Docente', 'c4@ejemplo.invalid'),
+  contacto(AROMOS, 'ASE', 'Docente', 'C4@ejemplo.invalid '),               // same email and role twice
+  contacto(AROMOS, 'ASE', 'Docente', 'c5@ejemplo.invalid'),
+  contacto(AROMOS, 'ASE', 'Docente', ''),                                   // no email: still expected
+  contacto(AROMOS, 'ASE', '', 'c6@ejemplo.invalid'),                        // no role
+  contacto(AROMOS, 'ASE', 'Otro', 'c7@ejemplo.invalid'),                    // also in El Faro
+  contacto(AROMOS, 'Religión', 'Encargado/a', 'c8@ejemplo.invalid'),
+  contacto(AROMOS, 'Religión', 'Docente y Mentor/a', 'c9@ejemplo.invalid'),
+  contacto(AROMOS, 'Religión', 'Otro', 'c9@ejemplo.invalid'),               // same email, another role
+  contacto(AROMOS, 'Religión', '', 'c10@ejemplo.invalid'),
+  contacto(AROMOS, 'Religión', 'Docente', 'c10@ejemplo.invalid'),           // same email, once without a role
+  contacto(FARO, 'ASE', 'Otro', 'c7@ejemplo.invalid'),
+  contacto(FARO, 'ASE', 'Docente', 'c11@ejemplo.invalid'),
+  contacto(' -  - 0', 'ASE', 'Docente', 'c12@ejemplo.invalid'),             // account is not a school
+  ['', '', '', '', '', '', '', '', '', '', '', '', '']];
+
+const d = ctx.cargarDatos_();
+const s = ctx.datosSeguimiento_();
+const out = ctx.seguimientoEfa_(d, s, reloj);
+const T = out.tabs['Resumen'], h = T[2];
+const fila = (rbd, prog, t = T) => { const r = t.find(x => x[0] === Number(rbd) && x[2] === prog); return r && Object.fromEntries(t[2].map((k, i) => [k, r[i]])); };
+const a = fila('11111', 'ASE'), rl = fila('11111', 'REL'), f = fila('22222', 'ASE');
+const nota = (rbd, prog, c) => (out.notas['Resumen'].find(([r, j]) => T[r][0] === rbd && T[r][2] === prog && h[j] === c) || [])[2];
+const notaEnc = c => (out.notas['Resumen'].find(([r, j]) => r === 2 && h[j] === c) || [])[2];
+
+check('one tab, status lines, contract header: base, 5 roles × resp./esp./%, Niveles sin docentes, grade pairs in canonical order',
+  Object.keys(out.tabs).join() === 'Resumen' && T[0][0] === 'Actualizado: 03-11-2026 14:32' && /^Actualización automática cada 2 minutos/.test(T[1][0])
+  && h.slice(0, 14).join('|') === 'RBD|Colegio|Programa|Modelo|EDI|Jefe/a de Proyecto|Coordinador/a|Correo enviado|Ingresos desde la apertura|Último ingreso|Compartió la EFA|Contactos SF|Respuestas|Sin rol declarado'
+  && h.slice(14, 29).join('|') === 'Director/a resp.|Director/a esp.|Director/a %|Encargado/a resp.|Encargado/a esp.|Encargado/a %|Mentor/a resp.|Mentor/a esp.|Mentor/a %|Otros líderes resp.|Otros líderes esp.|Otros líderes %|Docentes resp.|Docentes esp.|Docentes %'
+  && h[29] === 'Niveles sin docentes' && h[30] === '1° básico doc.' && h[31] === '1° básico cursos' && h[h.length - 1] === 'IV° medio cursos' && h.length === 30 + 2 * 12);
+check('rows: school-programs with an EFA link or responses; Control left out', T.length === 6 && !!a && !!rl && !!f && !fila('33333', 'ASE'));
+check('Respuestas = the portal total (dedup email + role)', (() => {
+  const p = post({ rbd: '11111', clave: 'aaa111' }).programas, q = post({ rbd: '22222', clave: 'bbb222' }).programas;
+  return a.Respuestas === p.find(x => x.programa === 'ase').efa.total && rl.Respuestas === p.find(x => x.programa === 'rel').efa.total
+    && f.Respuestas === q.find(x => x.programa === 'ase').efa.total && a.Respuestas === 6 && rl.Respuestas === 5 && f.Respuestas === 4;
+})());
+check('responses by role: each counts in every role it declares ("todos" in 3, "ambos" in 2); EDI Equipo Directivo in Otros líderes; unknown option in Otros líderes',
+  a['Director/a resp.'] === 1 && a['Mentor/a resp.'] === 1 && a['Docentes resp.'] === 3 && a['Encargado/a resp.'] === 0
+  && rl['Encargado/a resp.'] === 2 && rl['Mentor/a resp.'] === 2 && rl['Docentes resp.'] === 3 && rl['Otros líderes resp.'] === 1
+  && f['Otros líderes resp.'] === 1 && f['Docentes resp.'] === 2 && f['Director/a resp.'] === 0);
+check('Sin rol declarado: counted in Respuestas, in no role', f['Sin rol declarado'] === 1 && a['Sin rol declarado'] === 1 && rl['Sin rol declarado'] === 0
+  && f['Respuestas'] === 1 + 1 + 2);
+check('expected = SF contacts per role, as SF has them (repeats and no-email contacts count; multi-role in each role)',
+  a['Contactos SF'] === 9 && a['Director/a esp.'] === 1 && a['Encargado/a esp.'] === 2 && a['Mentor/a esp.'] === 1 && a['Otros líderes esp.'] === 1 && a['Docentes esp.'] === 4
+  && rl['Contactos SF'] === 5 && rl['Docentes esp.'] === 2 && rl['Mentor/a esp.'] === 1 && rl['Otros líderes esp.'] === 1 && f['Contactos SF'] === 2 && f['Encargado/a esp.'] === 0);
+check('% = resp. / esp., blank without contacts for the role', a['Docentes %'] === 0.75 && a['Director/a %'] === 1 && f['Encargado/a %'] === '' && rl['Encargado/a %'] === 2);
+check('no Contactos EFA tab: Contactos SF, esp. and % blank, header note says why', (() => {
+  const x = fila('11111', 'ASE', sinContactos.tabs['Resumen']), hd = sinContactos.tabs['Resumen'][2];
+  return x['Contactos SF'] === '' && x['Docentes esp.'] === '' && x['Docentes %'] === '' && x['Docentes resp.'] === 3
+    && sinContactos.notas['Resumen'].some(([r, j, t]) => r === 2 && hd[j] === 'Contactos SF' && /^Falta la pestaña Contactos EFA/.test(t));
+})());
+check('Correo enviado from Correos EFA (date only); logins since the EFA opened, internal views excluded; latest login',
+  a['Correo enviado'] === '02-11-2026' && f['Correo enviado'] === '' && a['Ingresos desde la apertura'] === 1 && a['Último ingreso'] === '03-11-2026 10:00');
+check('Compartió la EFA per program, deduplicated; Test shares and internal ones left out', a['Compartió la EFA'] === 'WhatsApp, QR' && rl['Compartió la EFA'] === 'link' && f['Compartió la EFA'] === '');
+check('ASE docentes by grade: count per declared grade, CxN as cursos; outside the registered grades flagged; REL blank',
+  a['5° básico doc.'] === 1 && a['5° básico cursos'] === 2 && a['I° medio doc.'] === 1 && a['I° medio cursos'] === 'Fuera de lo registrado'
+  && a['1° básico doc.'] === 0 && f['5° básico doc.'] === 1 && f['6° básico doc.'] === 1 && f['4° básico doc.'] === 1 && f['1° básico doc.'] === ''
+  && rl['5° básico doc.'] === '' && rl['Niveles sin docentes'] === '');
+check('Niveles sin docentes: implemented grades with no docente (short labels)', a['Niveles sin docentes'] === '1°, 2°, 3°, 4°, 7°, 8°' && f['Niveles sin docentes'] === '7°, 8°, I°, II°, III°, IV°');
+check('header notes: what Contactos SF, Respuestas, Sin rol, roles, Otros líderes and the grade block mean',
+  /^Contactos vigentes en Salesforce/.test(notaEnc('Contactos SF')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos SF'))
+  && /No se muestran: 1 de un programa Control, 1 de un RBD que no está en SF \\(pruebas incluidas\\), 1 de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
+  && /no acepta participar del estudio/.test(notaEnc('Sin rol declarado')) && /suma de los roles puede superar Respuestas/.test(notaEnc('Director/a resp.'))
+  && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico doc.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
+check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '6 respuestas de 5 personas: 1 respondió con más de un rol (cada rol es una respuesta).\\nSe descartó 1 envío repetido (mismo correo y rol); cuenta el más reciente.');
+check('note on Respuestas: "todos los roles", "ambos roles", unknown role, before the opening',
+  nota(11111, 'REL', 'Respuestas') === '1 respuesta «Cumplo todos los roles» cuenta en Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.\\n'
+  + '1 respuesta «Encargado/a y Mentor/a» cuenta en ambos roles; en Respuestas, una vez.\\nRol no reconocido «Inspector/a general»: cuenta en Otros líderes.\\n'
+  + '1 respuesta anterior a la apertura (02-11-2026): posibles pruebas.');
+check('note: no role outside EFA-EDI is flagged; inside EFA-EDI it is not', /Fuera de EFA-EDI/.test(nota(11111, 'ASE', 'Sin rol declarado')) && !nota(22222, 'ASE', 'Sin rol declarado'));
+check('note on Docentes resp.: several grades and no grade; merged with another note on the same cell', nota(11111, 'ASE', 'Docentes resp.') === 'Docentes: 3. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno; 1 sin nivel declarado.'
+  && nota(22222, 'ASE', 'Docentes resp.') === '1 sobre lo esperado (esperado: 1).\\nDocentes: 2. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno.'); // two notes on one cell: merged
+check('notes per role: above what SF has; no SF contact with the role; no Encargado/a in SF',
+  nota(11111, 'REL', 'Encargado/a resp.') === '1 sobre lo esperado (esperado: 1).' && nota(22222, 'ASE', 'Docentes resp.') !== undefined
+  && nota(11111, 'REL', 'Docentes resp.') === '1 sobre lo esperado (esperado: 2).' && nota(22222, 'ASE', 'Encargado/a esp.') === 'Sin Encargado/a en Salesforce.'
+  && !nota(11111, 'ASE', 'Docentes resp.').includes('sobre lo esperado'));
+check('notes on Contactos SF: repeated email (same role / one without role / two roles), no role, also in another school',
+  nota(11111, 'ASE', 'Contactos SF') === '1 correo aparece más de una vez con el mismo rol: cuenta cada vez. Si es la misma persona, corrígelo en Salesforce.\\n'
+  + '1 contacto sin rol en Salesforce: no cuenta en ningún esperado.\\n1 contacto también aparece en otro colegio (RBD 22222).'
+  && nota(11111, 'REL', 'Contactos SF') === '1 correo aparece dos veces, una sin rol. Si es la misma persona, corrígelo en Salesforce.\\n'
+  + '1 correo tiene dos roles en filas distintas («Docente y Mentor/a» y «Otro»): cuenta en ambos. Si no corresponde, corrígelo en Salesforce.\\n1 contacto sin rol en Salesforce: no cuenta en ningún esperado.');
+check('note on a grade outside the registered ones', nota(11111, 'ASE', 'I° medio cursos') === 'Fuera de lo registrado: SF no tiene este nivel en el programa, pero 1 docente lo declaró.');
+check('gray blocks: Director/a, Mentor/a, Docentes (3 columns each), then every other grade pair',
+  out.formato['Resumen'].gris.slice(0, 9).map(c => h[c]).join() === 'Director/a resp.,Director/a esp.,Director/a %,Mentor/a resp.,Mentor/a esp.,Mentor/a %,Docentes resp.,Docentes esp.,Docentes %'
+  && out.formato['Resumen'].gris.slice(9, 13).map(c => h[c]).join() === '1° básico doc.,1° básico cursos,3° básico doc.,3° básico cursos');
+check('rows have the header width; RBD as a number', T.slice(3).every(r => r.length === h.length) && a.RBD === 11111);
+check('notes point inside the tab (header row or below, column within the header)', out.notas['Resumen'].every(([r, c]) => r >= 2 && r < T.length && c < h.length));
+check('no names or emails anywhere', !/@|Fuentes|Ríos|Ficticio|Acepta|Mella/.test(JSON.stringify(out)));
+check('EFA responses unreadable → null (keep the previous tracker)', ctx.seguimientoEfa_(Object.assign({}, d, { efa: null }), s, reloj) === null);
+check('the Test tracker is unchanged by the EFA sources', Object.keys(ctx.seguimiento_(d, s, reloj).tabs).join() === 'Resumen,Por curso');
+`);

@@ -91,7 +91,7 @@ function crearSeguimiento(id) {
   const rango = t => "'" + t.replace(/'/g, "''") + "'";
   const post = (ruta, cuerpo) => api(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
   // Status lines above, header bold and frozen with them; header + data: gray or white per column;
-  // data rows: "%" columns as percent, every other column back to automatic
+  // data rows: "%" columns ("%", "Director/a %") as percent, every other column back to automatic
   const col = (sheetId, desde, j) => ({ sheetId, startRowIndex: desde, startColumnIndex: j, endColumnIndex: j + 1 });
   const formatos = (sheetId, encabezado, gris) => [
     { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: ENC + 1 } }, fields: 'gridProperties.frozenRowCount' } },
@@ -100,10 +100,10 @@ function crearSeguimiento(id) {
     .concat(encabezado.map((t, j) => ({ repeatCell: { range: col(sheetId, ENC, j),
       cell: { userEnteredFormat: { backgroundColor: gris.indexOf(j) >= 0 ? GRIS : BLANCO } }, fields: 'userEnteredFormat.backgroundColor' } })))
     .concat(encabezado.map((t, j) => ({ repeatCell: { range: col(sheetId, ENC + 1, j),
-      cell: { userEnteredFormat: t === '%' ? { numberFormat: { type: 'PERCENT', pattern: '0%' } } : {} }, fields: 'userEnteredFormat.numberFormat' } })));
+      cell: { userEnteredFormat: /(^| )%$/.test(t) ? { numberFormat: { type: 'PERCENT', pattern: '0%' } } : {} }, fields: 'userEnteredFormat.numberFormat' } })));
   const notasEscritas = {}; // tab → notes last written (with its sheetId), so unchanged notes are not rewritten every 2 min
   return {
-    // notas: {tab: [[row, col, text]]} (0-based). Each tab's data-area notes are replaced as a whole when they change.
+    // notas: {tab: [[row, col, text]]} (0-based). Each tab's notes from the header row down are replaced as a whole when they change.
     // formato: {tab: {gris: [cols]}}: columns shaded gray (header and data).
     async escribir(tabs, notas = {}, formato = {}) {
       const meta = await api(base + '?fields=sheets(properties(title,sheetId,gridProperties),developerMetadata(metadataId,metadataKey,metadataValue))');
@@ -157,7 +157,7 @@ function crearSeguimiento(id) {
         const clave = sheetId + '|' + JSON.stringify(notas[n]);
         if (notasEscritas[n] === clave) return;
         nuevas[n] = clave;
-        pedNotas.push({ repeatCell: { range: { sheetId, startRowIndex: ENC + 1 }, cell: {}, fields: 'note' } }); // clears the old ones
+        pedNotas.push({ repeatCell: { range: { sheetId, startRowIndex: ENC }, cell: {}, fields: 'note' } }); // clears the old ones (header included)
         notas[n].forEach(([fila, col, texto]) => pedNotas.push({ updateCells: { start: { sheetId, rowIndex: fila, columnIndex: col }, rows: [{ values: [{ note: texto }] }], fields: 'note' } }));
       });
       if (pedNotas.length) {

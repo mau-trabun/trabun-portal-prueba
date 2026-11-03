@@ -182,6 +182,33 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
     && /^Actualización automática cada 2 minutos de 8:00 a 18:00, y una vez por hora el resto del día\\.$/.test(escritos[escritos.length - 1].Resumen[1][0]));
   delete sheets['Correos Test'];
 
+  // EFA tracker (its own Sheet): same rows as Code.js on Apps Script; SF contacts read without names, Correos EFA without emails
+  sheets['Correos EFA'] = [['RBD', 'Colegio', 'Para', 'Enviar', 'Enviado'], ['11111', 'x', 'enc@ejemplo.invalid', true, new Date(2026, 10, 2, 8, 5)]];
+  sheets['Contactos EFA'] = [['Nombre para formulario', 'Account Name', 'Implementación: Record Type', 'First Name', 'Last Name', 'Rol en la Implementacióon', 'Email'],
+    [AROMOS, 'Cuenta Ficticia', 'ASE', 'Nombre', 'Ficticio', 'Docente', 'c1@ejemplo.invalid'], [AROMOS, 'Cuenta Ficticia', 'ASE', 'Otro', 'Ficticio', 'Docente', 'c1@ejemplo.invalid'],
+    [AROMOS, 'Cuenta Ficticia', 'Religión', 'Nombre', 'Ficticio', 'Encargado/a', 'c2@ejemplo.invalid']];
+  const escritosEfa = [];
+  const segEfa = { async escribir(tabs, notas, formato) { escritosEfa.push({ tabs: JSON.parse(JSON.stringify(tabs)), notas, formato }); } };
+  const svc11 = crearServicio({ src, planilla, seguimientoEfa: segEfa, log: silencio });
+  await svc11.manejar('POST', '/refrescar', '');
+  await new Promise(r => setTimeout(r, 10));
+  const snapEfa = svc11._estado().snap.tablas;
+  check('EFA tracker on: Contactos EFA only its 4 columns (no names), Correos EFA only RBD + Enviado; Correos Test not read',
+    snapEfa['Contactos EFA'][0].join() === 'Nombre para formulario,Implementación: Record Type,Rol en la Implementacióon,Email' && !JSON.stringify(snapEfa['Contactos EFA']).includes('Ficticio')
+    && snapEfa['Correos EFA'][0].join() === 'RBD,Enviado' && !JSON.stringify(snapEfa['Correos EFA']).includes('enc@') && !pedidas.includes('Correos Test') && pedidas.includes('Métricas'));
+  const esperadoEfa = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), ctx.reloj_());
+  check('EFA tracker written after a snapshot, rows, notes and bands identical to Code.js on Apps Script', escritosEfa.length === 1
+    && Object.keys(escritosEfa[0].tabs).join() === 'Resumen' && JSON.stringify(sinEstado(escritosEfa[0].tabs)) === JSON.stringify(sinEstado(esperadoEfa.tabs))
+    && JSON.stringify(escritosEfa[0].notas) === JSON.stringify(esperadoEfa.notas) && JSON.stringify(escritosEfa[0].formato) === JSON.stringify(esperadoEfa.formato)
+    && escritosEfa[0].tabs.Resumen.find(r => r[0] === 11111 && r[2] === 'ASE')[escritosEfa[0].tabs.Resumen[2].indexOf('Docentes esp.')] === 2);
+  const n1 = escritos.length;
+  const segFalla = { async escribir() { throw new Error('Sheets 500'); } };
+  const svc12 = crearServicio({ src, planilla, seguimiento: segFalla, seguimientoEfa: segEfa, log: silencio });
+  await svc12.manejar('POST', '/refrescar', '');
+  await new Promise(r => setTimeout(r, 10));
+  check('the Test tracker failing never stops the EFA one', escritosEfa.length === 2 && escritos.length === n1);
+  delete sheets['Correos EFA']; delete sheets['Contactos EFA'];
+
   // HTTP layer: CORS by origin, body limit, unknown route
   const srv = crearServidor(svc, ['https://mau-trabun.github.io']).listen(0);
   await new Promise(r => srv.once('listening', r));

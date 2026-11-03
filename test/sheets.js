@@ -141,7 +141,7 @@ global.fetch = async (url, op = {}) => {
   const req = conNotas ? conNotas.cuerpo.requests : [];
   const borra = req.filter(q => q.repeatCell && q.repeatCell.fields === 'note');
   const pone = req.filter(q => q.updateCells);
-  check('notes: one clear per tab from row 4 down, then each note at its cell, after the values', borra.length === 2 && borra.every(q => q.repeatCell.range.startRowIndex === 3 && JSON.stringify(q.repeatCell.cell) === '{}')
+  check('notes: one clear per tab from the header row (3) down, then each note at its cell, after the values', borra.length === 2 && borra.every(q => q.repeatCell.range.startRowIndex === 2 && JSON.stringify(q.repeatCell.cell) === '{}')
     && pone.length === 3 && pone[0].updateCells.start.rowIndex === 3 && pone[0].updateCells.start.columnIndex === 2 && pone[0].updateCells.rows[0].values[0].note === 'El % considera solo…'
     && llamadas.findIndex(l => l.ruta.endsWith('values:batchUpdate')) < llamadas.indexOf(conNotas));
   llamadas = [];
@@ -158,4 +158,11 @@ global.fetch = async (url, op = {}) => {
   await seg.escribir({ Resumen: filas(50), 'Por curso': filas(1) });
   const crecer = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
   check('grid grown before writing more rows than it has', crecer && crecer.cuerpo.requests.some(q => q.appendDimension && q.appendDimension.dimension === 'ROWS' && q.appendDimension.length >= 42));
+
+  // EFA tracker: one "%" per role ("Director/a %"), each as percent; "esp." and the rest stay automatic
+  llamadas = [];
+  await crearSeguimiento('z').escribir({ EFA: [['Actualizado: …'], ['…'], ['RBD', 'Director/a resp.', 'Director/a esp.', 'Director/a %', 'Docentes %']] });
+  const fmt = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')).cuerpo.requests
+    .filter(q => q.repeatCell && q.repeatCell.fields === 'userEnteredFormat.numberFormat' && q.repeatCell.cell.userEnteredFormat.numberFormat);
+  check('role "%" columns (name + " %") as percent, only those', fmt.map(q => q.repeatCell.range.startColumnIndex).join() === '3,4');
 })();
