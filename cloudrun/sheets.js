@@ -93,6 +93,12 @@ function crearSeguimiento(id) {
   // Status lines above, header bold and frozen with them; header + data: gray or white per column;
   // data rows: "%" columns ("%", "Director/a %") as percent, every other column back to automatic
   const col = (sheetId, desde, j) => ({ sheetId, startRowIndex: desde, startColumnIndex: j, endColumnIndex: j + 1 });
+  // Free layout (formato.libre, e.g. tables laid out in blocks): nothing frozen, every old format cleared once,
+  // only the formato.pct columns as percent from the header row down; the team adds its own colors after that
+  const formatosLibres = (sheetId, pct) => [
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 0 } }, fields: 'gridProperties.frozenRowCount' } },
+    { repeatCell: { range: { sheetId }, cell: {}, fields: 'userEnteredFormat' } }]
+    .concat(pct.map(j => ({ repeatCell: { range: col(sheetId, ENC, j), cell: { userEnteredFormat: { numberFormat: { type: 'PERCENT', pattern: '0%' } } }, fields: 'userEnteredFormat.numberFormat' } })));
   const formatos = (sheetId, encabezado, gris) => [
     { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: ENC + 1 } }, fields: 'gridProperties.frozenRowCount' } },
     { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: ENC }, cell: { userEnteredFormat: { textFormat: { bold: false } } }, fields: 'userEnteredFormat.textFormat.bold' } },
@@ -104,7 +110,7 @@ function crearSeguimiento(id) {
   const notasEscritas = {}; // tab → notes last written (with its sheetId), so unchanged notes are not rewritten every 2 min
   return {
     // notas: {tab: [[row, col, text]]} (0-based). Each tab's notes from the header row down are replaced as a whole when they change.
-    // formato: {tab: {gris: [cols]}}: columns shaded gray (header and data).
+    // formato: {tab: {gris: [cols]}}: columns shaded gray (header and data); {tab: {libre: true, pct: [cols]}}: free layout.
     async escribir(tabs, notas = {}, formato = {}) {
       const meta = await api(base + '?fields=sheets(properties(title,sheetId,gridProperties),developerMetadata(metadataId,metadataKey,metadataValue))');
       const hojas = {}, marcas = {};
@@ -119,7 +125,9 @@ function crearSeguimiento(id) {
         const filas = tabs[n], alto = filas.length, ancho = filas.reduce((m, r) => Math.max(m, r.length), 1);
         const h = hojas[n];
         const encabezado = filas[ENC] || [], gris = (formato[n] && formato[n].gris) || [];
-        const valor = JSON.stringify({ v: FORMATO_V, encabezado, gris });
+        const libre = !!(formato[n] && formato[n].libre), pct = (libre && formato[n].pct) || [];
+        const valor = JSON.stringify(libre ? { v: FORMATO_V, libre, encabezado, pct } : { v: FORMATO_V, encabezado, gris });
+        const dar = sheetId => (libre ? formatosLibres(sheetId, pct) : formatos(sheetId, encabezado, gris));
         const marcar = sheetId => (marcas[n]
           ? { updateDeveloperMetadata: { dataFilters: [{ developerMetadataLookup: { metadataId: marcas[n].metadataId } }], developerMetadata: { metadataValue: valor }, fields: 'metadataValue' } }
           : { createDeveloperMetadata: { developerMetadata: { metadataKey: MARCA, metadataValue: valor, location: { sheetId }, visibility: 'DOCUMENT' } } });
@@ -128,13 +136,13 @@ function crearSeguimiento(id) {
           do { sheetId = 1 + Math.floor(Math.random() * 2e9); } while (usados.has(sheetId));
           usados.add(sheetId);
           pedidos.push({ addSheet: { properties: { sheetId, title: n, gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } } } });
-          pedidos.push(...formatos(sheetId, encabezado, gris), marcar(sheetId));
+          pedidos.push(...dar(sheetId), marcar(sheetId));
           hojas[n] = { sheetId, gridProperties: { rowCount: alto + 100, columnCount: ancho + 2 } };
         } else {
           const g = h.gridProperties || {};
           if ((g.rowCount || 0) < alto) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'ROWS', length: alto - (g.rowCount || 0) + 100 } });
           if ((g.columnCount || 0) < ancho) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'COLUMNS', length: ancho - (g.columnCount || 0) + 2 } });
-          if (!marcas[n] || marcas[n].metadataValue !== valor) pedidos.push(...formatos(h.sheetId, encabezado, gris), marcar(h.sheetId));
+          if (!marcas[n] || marcas[n].metadataValue !== valor) pedidos.push(...dar(h.sheetId), marcar(h.sheetId));
         }
       });
       if (pedidos.length) await post(':batchUpdate', { requests: pedidos });

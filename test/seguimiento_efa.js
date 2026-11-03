@@ -134,42 +134,60 @@ check('notes point inside the tab (header row or below, column within the header
 check('no names or emails anywhere', !/@|Fuentes|Ríos|Ficticio|Acepta|Mella/.test(JSON.stringify(out)));
 const filasR = T.slice(3).map(r => Object.fromEntries(h.map((k, i) => [k, r[i]])));
 const sumaR = (filas, k) => filas.reduce((t, x) => t + (typeof x[k] === 'number' ? x[k] : 0), 0);
-const deTab = n => out.tabs[n].slice(3).map(r => Object.fromEntries(out.tabs[n][2].map((k, i) => [k, r[i]])));
-const J = deTab('Por JdP'), P = deTab('Por programa');
+const ROLES = ['Director/a', 'Encargado/a', 'Mentor/a', 'Otros líderes', 'Docentes'];
+// Free layout: tables found by their header row (label in B, "Implementaciones" in C); a table ends at the blank row
+const bloques = t => {
+  const res = [];
+  for (let i = 3; i < t.length; i++) {
+    if (t[i][2] !== 'Implementaciones') continue;
+    const enc = t[i], filas = [];
+    let j = i + 1;
+    for (; j < t.length && t[j].length; j++) filas.push(Object.assign({ _fila: j }, Object.fromEntries(enc.map((k, c) => [k, t[j][c]]))));
+    res.push({ titulo: (t[i - 1] || [])[1] || '', enc, filas });
+    i = j;
+  }
+  return res;
+};
 const cuadra = (g, filas) => g.Implementaciones === filas.length && g['Impl. con al menos 1 respuesta'] === filas.filter(x => x.Respuestas > 0).length
-  && ['Contactos SF', 'Respuestas'].concat([].concat.apply([], ['Director/a', 'Encargado/a', 'Mentor/a', 'Otros líderes', 'Docentes'].map(r => [r + ' resp.', r + ' esp.'])))
-    .every(k => g[k] === sumaR(filas, k));
-check('Por JdP: one row per JdP (sorted) + Total; every number = sum of its Resumen rows',
-  out.tabs['Por JdP'][2].slice(0, 5).join('|') === 'Jefe/a de Proyecto|Implementaciones|Impl. con al menos 1 respuesta|Contactos SF|Respuestas'
-  && J.length === new Set(filasR.map(x => x['Jefe/a de Proyecto'])).size + 1 && J[J.length - 1]['Jefe/a de Proyecto'] === 'Total'
-  && J.slice(0, -1).every(g => cuadra(g, filasR.filter(x => (x['Jefe/a de Proyecto'] || '(sin Jefe/a de Proyecto)') === g['Jefe/a de Proyecto'])))
-  && cuadra(J[J.length - 1], filasR));
-check('Por programa: main block (ASE sin EDI, ASE EDI by cohort, REL, Total), blank row, then each group by modelo; sums of Resumen rows', (() => {
+  && g.Respuestas === sumaR(filas, 'Respuestas')
+  && ROLES.every(r => g['% Avance ' + r] === (sumaR(filas, r + ' esp.') ? Math.round(sumaR(filas, r + ' resp.') / sumaR(filas, r + ' esp.') * 1000) / 1000 : ''));
+const TJ = out.tabs['Por JdP'], TP = out.tabs['Por programa'], BJ = bloques(TJ), BP = bloques(TP);
+check('Por JdP laid out like 2025: status lines, title in B3, blank row, one table from column B (JdP rows + Total), footnote',
+  /^Actualizado: /.test(TJ[0][0]) && TJ[2][0] === '' && TJ[2][1] === 'Resumen de respuestas por Jefe/a de Proyecto · EFA 2026' && !TJ[3].length
+  && BJ.length === 1 && BJ[0].enc.join('|') === '|Jefe/a de Proyecto|Implementaciones|Impl. con al menos 1 respuesta|Respuestas|% Avance Director/a|% Avance Encargado/a|% Avance Mentor/a|% Avance Otros líderes|% Avance Docentes'
+  && /^\\*% = respuestas del grupo ÷ contactos esperados en Salesforce/.test(TJ[TJ.length - 1][1]) && !TJ[TJ.length - 2].length);
+check('Por JdP: one row per JdP (sorted) + Total; counts = sums of Resumen rows, % pooled (Σ resp. ÷ Σ esp.)', (() => {
+  const f = BJ[0].filas, jdps = f.slice(0, -1).map(g => g['Jefe/a de Proyecto']);
+  return f.length === new Set(filasR.map(x => x['Jefe/a de Proyecto'])).size + 1 && f[f.length - 1]['Jefe/a de Proyecto'] === 'Total'
+    && JSON.stringify(jdps) === JSON.stringify(jdps.slice().sort((x, y) => ctx.compararTexto_(x, y)))
+    && f.slice(0, -1).every(g => cuadra(g, filasR.filter(x => (x['Jefe/a de Proyecto'] || '(sin Jefe/a de Proyecto)') === g['Jefe/a de Proyecto'])))
+    && cuadra(f[f.length - 1], filasR);
+})());
+check('Por programa: first table by group (ASE sin EDI, ASE EDI by cohort, REL, Total), then one table per group by modelo with its Total', (() => {
   const grp = x => (x.Programa === 'ASE' ? (x.EDI ? 'ASE EDI · cohorte 1 (2025)' : 'ASE sin EDI') : 'REL'); // fixture EDI school: Año inicio 2025
-  const arriba = P.slice(0, 4), vacia = P[4], abajo = P.slice(5);
-  return out.tabs['Por programa'][2].slice(0, 3).join('|') === 'Grupo|Modelo|Implementaciones'
-    && arriba.map(g => g.Grupo + '/' + g.Modelo).join() === 'ASE sin EDI/,ASE EDI · cohorte 1 (2025)/,REL/,Total/'
-    && arriba.slice(0, 3).every(g => cuadra(g, filasR.filter(x => grp(x) === g.Grupo))) && cuadra(arriba[3], filasR)
-    && Object.values(vacia).every(v => v === '')
-    && abajo.length === 3 && abajo.every(g => g.Modelo && cuadra(g, filasR.filter(x => grp(x) === g.Grupo && x.Modelo === g.Modelo)))
-    && abajo.map(g => g.Grupo).join() === 'ASE sin EDI,ASE EDI · cohorte 1 (2025),REL';
+  const [g0, ...resto] = BP;
+  return TP[2][1] === 'Resumen de respuestas por Programa y Modelo · EFA 2026'
+    && g0.titulo === 'Implementaciones por grupo' && g0.enc[1] === 'Grupo' && g0.filas.map(g => g.Grupo).join() === 'ASE sin EDI,ASE EDI · cohorte 1 (2025),REL,Total'
+    && g0.filas.slice(0, -1).every(g => cuadra(g, filasR.filter(x => grp(x) === g.Grupo))) && cuadra(g0.filas[3], filasR)
+    && resto.map(b => b.titulo).join() === 'Implementaciones ASE sin EDI por modelo,Implementaciones ASE EDI · cohorte 1 (2025) por modelo,Implementaciones REL por modelo'
+    && resto.every(b => {
+      const grupo = b.titulo.replace(/^Implementaciones /, '').replace(/ por modelo$/, ''), de = filasR.filter(x => grp(x) === grupo);
+      return b.enc[1] === 'Modelo' && b.filas[b.filas.length - 1].Modelo === 'Total' && cuadra(b.filas[b.filas.length - 1], de)
+        && b.filas.slice(0, -1).every(g => cuadra(g, de.filter(x => x.Modelo === g.Modelo)));
+    })
+    && /cohorte 1 = año de inicio 2025, cohorte 2 = 2026\\.$/.test(TP[TP.length - 1][1]);
 })());
-check('summary %: group resp. ÷ group esp. (pooled, not an average of schools)', (() => {
-  const t = J[J.length - 1];
-  return t['Docentes %'] === Math.round(sumaR(filasR, 'Docentes resp.') / sumaR(filasR, 'Docentes esp.') * 1000) / 1000;
+check('summary tabs: free layout, % columns (F–J) as percent; no bands', ['Por JdP', 'Por programa'].every(n => out.formato[n].libre === true
+  && out.formato[n].pct.join() === '5,6,7,8,9' && !out.formato[n].gris && out.tabs[n].every(r => r.slice(5, 10).every(v => v === '' || typeof v === 'number' || /^% Avance /.test(v)))));
+check('summary tabs: no-role count only as a note on Respuestas of the rows that have it (Total included)', (() => {
+  const n = out.notas['Por JdP'];
+  return !TJ.some(r => r.some(v => /sin rol/i.test(v))) && n.length >= 1 && n.every(([r, c, x]) => c === 4 && TJ[r][4] >= 1
+    && /^\\d+ respuestas? sin rol: cuentan? en Respuestas totales, pero no en la desagregación por rol\\.$/.test(x))
+    && n.some(([r]) => TJ[r][1] === 'Total') && out.notas['Por programa'].every(([r, c]) => c === 4 && typeof TP[r][4] === 'number');
 })());
-check('summary tabs: header notes (pooled %, Total rows), gray role blocks, rows at header width',
-  /no es el promedio/.test(out.notas['Por JdP'][0][2]) && out.notas['Por programa'].some(([r, c, t]) => r === 2 && c === 0 && /Abajo, cada grupo por modelo/.test(t) && /cohorte 2 = 2026/.test(t))
-  && out.formato['Por JdP'].gris.slice(0, 3).join() === '5,6,7' && out.formato['Por programa'].gris.slice(0, 3).join() === '6,7,8'
-  && ['Por JdP', 'Por programa'].every(n => out.tabs[n].slice(2).every(r => r.length === out.tabs[n][2].length)));
-check('summary tabs: no-role count only as a note on Respuestas of the rows that have it', (() => {
-  const t = out.tabs['Por JdP'], cR = t[2].indexOf('Respuestas'), n = out.notas['Por JdP'].filter(([r, c]) => r > 2 && c === cR);
-  return !t[2].some(k => /sin rol/i.test(k)) && n.length >= 1 && n.every(([r, , x]) => /^\\d+ respuestas? sin rol: cuentan? en Respuestas totales, pero no en la desagregación por rol\\.$/.test(x) && r < t.length)
-    && n.some(([r]) => t[r][0] === 'Total');
-})());
-check('summary tabs without Contactos EFA: Contactos SF, esp. and % blank', (() => {
-  const t = sinContactos.tabs['Por JdP'], r = t[t.length - 1], c = k => r[t[2].indexOf(k)];
-  return c('Contactos SF') === '' && c('Docentes esp.') === '' && c('Docentes %') === '' && typeof c('Docentes resp.') === 'number';
+check('summary tabs without Contactos EFA: % blank, counts kept', (() => {
+  const t = sinContactos.tabs['Por JdP'], f = bloques(t)[0].filas, tot = f[f.length - 1];
+  return ROLES.every(r => tot['% Avance ' + r] === '') && typeof tot.Respuestas === 'number' && tot.Respuestas > 0;
 })());
 check('EFA responses unreadable → null (keep the previous tracker)', ctx.seguimientoEfa_(Object.assign({}, d, { efa: null }), s, reloj) === null);
 check('the Test tracker is unchanged by the EFA sources', Object.keys(ctx.seguimiento_(d, s, reloj).tabs).join() === 'Resumen,Por curso');

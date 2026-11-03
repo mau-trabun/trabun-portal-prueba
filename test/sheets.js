@@ -165,4 +165,19 @@ global.fetch = async (url, op = {}) => {
   const fmt = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')).cuerpo.requests
     .filter(q => q.repeatCell && q.repeatCell.fields === 'userEnteredFormat.numberFormat' && q.repeatCell.cell.userEnteredFormat.numberFormat);
   check('role "%" columns (name + " %") as percent, only those', fmt.map(q => q.repeatCell.range.startColumnIndex).join() === '3,4');
+
+  // Free layout (EFA Por JdP / Por programa): nothing frozen, old formats cleared once, only the given % columns; then left to the team
+  const libre = n => [['Actualizado: …'], ['…'], ['', 'Título'], [], ['', 'Grupo', 'Respuestas', '% Avance Director/a']].concat(Array.from({ length: n }, (_, i) => ['', 'G' + i, i, 0.5]));
+  const segL = crearSeguimiento('z');
+  llamadas = [];
+  await segL.escribir({ EFA: libre(2) }, {}, { EFA: { libre: true, pct: [3] } });
+  const rl = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')).cuerpo.requests;
+  check('free layout: 0 frozen rows, all formats cleared, percent only on the given column (from row 3), no bands or bold header',
+    JSON.stringify(congela(rl)) === '[0]' && rl.some(q => q.repeatCell && q.repeatCell.fields === 'userEnteredFormat' && q.repeatCell.range.startRowIndex === undefined)
+    && JSON.stringify(rl.filter(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat && q.repeatCell.cell.userEnteredFormat.numberFormat).map(q => q.repeatCell.range.startColumnIndex + '@' + q.repeatCell.range.startRowIndex)) === '["3@2"]'
+    && !rl.some(q => q.repeatCell && /backgroundColor|textFormat/.test(q.repeatCell.fields)));
+  llamadas = [];
+  await segL.escribir({ EFA: libre(3) }, {}, { EFA: { libre: true, pct: [3] } });
+  check('free layout: more rows, same title and % columns → no formatting request (team colors stay)',
+    !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values') && l.cuerpo.requests.some(q => q.repeatCell || q.updateSheetProperties)));
 })();

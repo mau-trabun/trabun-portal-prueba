@@ -821,7 +821,7 @@ function seguimiento_(d, s, reloj) {
 
 const SEG_EFA_TAB = 'Resumen';
 const SEG_EFA_JDP = 'Por JdP', SEG_EFA_PROG = 'Por programa'; // sums of Resumen rows (2025 tracker's Resumen JdP / Resumen Programa)
-const SEG_EFA_SUMA = ['Implementaciones', 'Impl. con al menos 1 respuesta', 'Contactos SF', 'Respuestas'];
+const SEG_EFA_SUMA = ['Implementaciones', 'Impl. con al menos 1 respuesta', 'Respuestas'];
 // SF report "Contactos EFA '26 (seguimiento)" through the Salesforce connector (daily). Cloud Run downloads only these
 // columns: Email only to spot repeated contacts, never written. SF labels the role field "Implementacióon" (typo).
 const TAB_CONTACTOS_EFA = 'Contactos EFA';
@@ -1046,34 +1046,40 @@ function seguimientoEfa_(d, s, reloj) {
   notasT[SEG_EFA_TAB] = notas;
   formato[SEG_EFA_TAB] = { gris };
 
-  // Por JdP / Por programa: sums of Resumen rows; % = group responses ÷ group expected (not an average of schools)
-  const sumar = grupo => {
-    const suma = k => grupo.reduce((t, f) => t + (typeof f[k] === 'number' ? f[k] : 0), 0);
-    const hayE = !!s.contactos;
-    return [grupo.length, grupo.filter(f => f.vig.length).length, hayE ? suma('nContactos') : '', grupo.reduce((t, f) => t + f.vig.length, 0)]
-      .concat([].concat.apply([], SEG_ROLES_EFA.map(([k]) => {
-        const rr = grupo.reduce((t, f) => t + f.r[k], 0), ee = grupo.reduce((t, f) => t + (typeof f.e[k] === 'number' ? f.e[k] : 0), 0);
-        return [rr, hayE ? ee : '', hayE ? pct(rr, ee) : ''];
-      })));
-  };
-  const resumen = (nombre, claves, grupos, notaEnc) => {
-    const enc = claves.concat(SEG_EFA_SUMA, [].concat.apply([], SEG_ROLES_EFA.map(r => [r[1] + ' resp.', r[1] + ' esp.', r[1] + ' %'])));
-    const t = [tab[0], tab[1], enc];
-    const c0 = claves.length + SEG_EFA_SUMA.length, notasR = [];
-    grupos.forEach(g => {
-      if (!g.filas) return t.push(enc.map(() => '')); // blank row between blocks
-      const sr = g.filas.reduce((n, f) => n + f.sinRol, 0);
-      if (sr) notasR.push([t.length, c0 - 1, sinRolTexto(sr)]);
-      t.push(g.etiqueta.concat(sumar(g.filas)));
+  // Por JdP / Por programa (Mau 03-11-2026): laid out like the 2025 tracker's Resumen JdP / Resumen Programa (title,
+  // tables from column B, a block per table, Total row, footnote); the team does the colors. Sums of Resumen rows;
+  // % = group responses ÷ group expected (not an average of schools).
+  const hayE = !!s.contactos;
+  const sumar = grupo => [grupo.length, grupo.filter(f => f.vig.length).length, grupo.reduce((t, f) => t + f.vig.length, 0)]
+    .concat(SEG_ROLES_EFA.map(([k]) => {
+      const rr = grupo.reduce((t, f) => t + f.r[k], 0), ee = grupo.reduce((t, f) => t + (typeof f.e[k] === 'number' ? f.e[k] : 0), 0);
+      return hayE ? pct(rr, ee) : '';
+    }));
+  const anio = reloj.hoy.slice(0, 4);
+  const PIE = '*% = respuestas del grupo ÷ contactos esperados en Salesforce, sumando todo el grupo (no es el promedio de los colegios). Una respuesta cuenta en cada rol que declara.';
+  const cResp = 1 + SEG_EFA_SUMA.length; // 0-based column of Respuestas (col A blank, B label)
+  const resumen = (nombre, titulo, bloques, pie) => {
+    const t = [tab[0], tab[1], ['', titulo]], notasR = [];
+    bloques.forEach(b => {
+      t.push([]);
+      if (b.titulo) t.push(['', b.titulo]);
+      t.push(['', b.etiqueta].concat(SEG_EFA_SUMA, SEG_ROLES_EFA.map(r => '% Avance ' + r[1])));
+      b.filas.forEach(g => {
+        const sr = g.filas.reduce((n, f) => n + f.sinRol, 0);
+        if (sr) notasR.push([t.length, cResp, sinRolTexto(sr)]);
+        t.push(['', g.nombre].concat(sumar(g.filas)));
+      });
     });
+    t.push([], ['', pie]);
     tabs[nombre] = t;
-    notasT[nombre] = [[2, c0, 'Suma de las filas de Resumen. % = respuestas del grupo ÷ esperados del grupo (no es el promedio de los colegios).']].concat(notaEnc || [], notasR);
-    formato[nombre] = { gris: [].concat.apply([], SEG_ROLES_EFA.map((_, j) => (j % 2 ? [] : [c0 + 3 * j, c0 + 3 * j + 1, c0 + 3 * j + 2]))) };
+    notasT[nombre] = notasR;
+    // free layout: no header band; % columns as percent from the title row down
+    formato[nombre] = { libre: true, pct: SEG_ROLES_EFA.map((_, j) => cResp + 1 + j) };
   };
   const porJdp = agrupar_(filas, f => f.sp.jefeProyecto || '');
-  resumen(SEG_EFA_JDP, ['Jefe/a de Proyecto'], Object.keys(porJdp).sort(compararTexto_)
-    .map(k => ({ etiqueta: [k || '(sin Jefe/a de Proyecto)'], filas: porJdp[k] })).concat([{ etiqueta: ['Total'], filas }]));
-  // Por programa (Mau 03-11-2026): main block = one row per group + Total; below, each group by modelo.
+  resumen(SEG_EFA_JDP, `Resumen de respuestas por Jefe/a de Proyecto · EFA ${anio}`, [{ etiqueta: 'Jefe/a de Proyecto',
+    filas: Object.keys(porJdp).sort(compararTexto_).map(k => ({ nombre: k || '(sin Jefe/a de Proyecto)', filas: porJdp[k] })).concat([{ nombre: 'Total', filas }]) }], PIE);
+  // Por programa: first table = one row per group + Total (main indicator); then one table per group by modelo.
   // Groups: ASE sin EDI, ASE EDI by cohort (Año inicio: 2025 = cohorte 1, 2026 = cohorte 2), REL.
   const grupoP = f => {
     const pr = prog(f.p), c = f.sp.anioInicio;
@@ -1083,13 +1089,14 @@ function seguimientoEfa_(d, s, reloj) {
   const porGrupo = agrupar_(filas, f => { const g = grupoP(f); return g.orden + '|' + g.nombre; });
   const claves = Object.keys(porGrupo).sort();
   const nombreG = k => k.slice(k.indexOf('|') + 1);
-  const gruposP = claves.map(k => ({ etiqueta: [nombreG(k), ''], filas: porGrupo[k] })).concat([{ etiqueta: ['Total', ''], filas }, {}]);
+  const bloquesP = [{ titulo: 'Implementaciones por grupo', etiqueta: 'Grupo',
+    filas: claves.map(k => ({ nombre: nombreG(k), filas: porGrupo[k] })).concat([{ nombre: 'Total', filas }]) }];
   claves.forEach(k => {
     const porModelo = agrupar_(porGrupo[k], f => f.sp.modelo || '');
-    Object.keys(porModelo).sort(compararTexto_).forEach(m => gruposP.push({ etiqueta: [nombreG(k), m || '(sin modelo)'], filas: porModelo[m] }));
+    bloquesP.push({ titulo: `Implementaciones ${nombreG(k)} por modelo`, etiqueta: 'Modelo',
+      filas: Object.keys(porModelo).sort(compararTexto_).map(m => ({ nombre: m || '(sin modelo)', filas: porModelo[m] })).concat([{ nombre: 'Total', filas: porGrupo[k] }]) });
   });
-  resumen(SEG_EFA_PROG, ['Grupo', 'Modelo'], gruposP,
-    [[2, 0, 'Arriba, cada grupo completo y el total. Abajo, cada grupo por modelo. EDI: cohorte 1 = año de inicio 2025, cohorte 2 = 2026.']]);
+  resumen(SEG_EFA_PROG, `Resumen de respuestas por Programa y Modelo · EFA ${anio}`, bloquesP, PIE + ' EDI: cohorte 1 = año de inicio 2025, cohorte 2 = 2026.');
   return { tabs, notas: notasT, formato };
 }
 
