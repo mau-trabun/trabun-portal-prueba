@@ -943,7 +943,6 @@ function seguimientoEfa_(d, s, reloj) {
   sinColegio ? pl(sinColegio, 'contacto no tiene colegio en Salesforce y no se puede asignar.', 'contactos no tienen colegio en Salesforce y no se pueden asignar.') : '']);
   nota(2, col('Respuestas'), ['Respuestas después de quitar envíos repetidos (mismo correo y rol; cuenta el más reciente). Cada rol es una respuesta.',
     noMuestran.length ? 'No se muestran: ' + noMuestran.join(', ') + '.' : '']);
-  nota(2, cRol, ['Cada respuesta cuenta en todos los roles que declara (p. ej. «Encargado/a y Mentor/a» en ambos), así que la suma de los roles puede superar Respuestas. esp. = contactos de Salesforce con ese rol.']);
   nota(2, cRol + 9, ['Otro/a líder y, en EFA-EDI, Equipo Directivo / Convivencia Escolar (en el portal aparece en Dirección).']);
   nota(2, cNiv, ['ASE: niveles implementados sin respuestas de docentes.']);
   if (columnas.length) nota(2, cGrado, ['Docentes que declararon el nivel (ASE). Un docente con varios niveles cuenta en cada uno; quien hace clases pero respondió solo con otro rol no aparece aquí. cursos = CxN en SF: contexto, no esperado (un docente puede tener varios cursos).']);

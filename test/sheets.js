@@ -104,10 +104,11 @@ global.fetch = async (url, op = {}) => {
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
   const ref = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
   const enResumen = ref && ref.cuerpo.requests.filter(q => q.repeatCell && q.repeatCell.range.sheetId === hojas.Resumen.props.sheetId);
-  check('header changed: % format moves to the new "%" column, the old one back to automatic; unchanged tab untouched', !!ref
+  check('header changed on an existing tab: % format moves to the new "%" column, the old one back to automatic; nothing else (no colors, bold or freeze); unchanged tab untouched', !!ref
     && JSON.stringify(pctEn(enResumen)) === '[3]' && enResumen.some(q => q.repeatCell.range.startColumnIndex === 2 && !q.repeatCell.cell.userEnteredFormat.numberFormat)
+    && enResumen.every(q => q.repeatCell.fields === 'userEnteredFormat.numberFormat')
     && !ref.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.range.sheetId === hojas['Por curso'].props.sheetId)
-    && JSON.stringify(congela(ref.cuerpo.requests)) === '[3]');
+    && JSON.stringify(congela(ref.cuerpo.requests)) === '[]');
   llamadas = [];
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) });
   check('same header again: no formatting request', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));
@@ -120,9 +121,14 @@ global.fetch = async (url, op = {}) => {
   llamadas = [];
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, {}, { Resumen: { gris: [1, 2] } });
   const bandas = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
-  check('bands: gray columns from the header row down, others white; only the changed tab', bandas
-    && fondo(bandas.cuerpo.requests, hojas.Resumen.props.sheetId).join() === '0:blanco@2,1:gris@2,2:gris@2,3:blanco@2'
-    && !fondo(bandas.cuerpo.requests, hojas['Por curso'].props.sheetId).length);
+  check('bands changed on an existing tab: never painted (the team\'s colors stay), marker updated', bandas
+    && !fondo(bandas.cuerpo.requests, hojas.Resumen.props.sheetId).length && !fondo(bandas.cuerpo.requests, hojas['Por curso'].props.sheetId).length
+    && JSON.parse(hojas.Resumen.marca.metadataValue).gris.join() === '1,2');
+  llamadas = [];
+  await crearSeguimiento('z').escribir({ Nueva: movida(1) }, {}, { Nueva: { gris: [1, 2] } });
+  const nueva = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
+  check('bands on a new tab: gray columns from the header row down, others white', nueva
+    && fondo(nueva.cuerpo.requests, hojas.Nueva.props.sheetId).join() === '0:blanco@2,1:gris@2,2:gris@2,3:blanco@2');
   llamadas = [];
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, {}, { Resumen: { gris: [1, 2] } });
   check('bands unchanged: nothing re-applied (team formatting stays)', !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')));
@@ -130,7 +136,8 @@ global.fetch = async (url, op = {}) => {
   llamadas = [];
   await seg.escribir({ Resumen: movida(1), 'Por curso': filas(1500) }, {}, { Resumen: { gris: [1, 2] } });
   const rollout = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
-  check('existing tab without a marker (older version): formatted once and marked', rollout && fondo(rollout.cuerpo.requests, hojas.Resumen.props.sheetId).length === 4
+  check('existing tab without a marker (older version or restored): number formats only, then marked', rollout && !fondo(rollout.cuerpo.requests, hojas.Resumen.props.sheetId).length
+    && rollout.cuerpo.requests.filter(q => q.repeatCell).every(q => q.repeatCell.fields === 'userEnteredFormat.numberFormat') && !congela(rollout.cuerpo.requests).length
     && rollout.cuerpo.requests.some(q => q.createDeveloperMetadata) && !!hojas.Resumen.marca);
 
   // Notes: data-area notes cleared and set after the values; unchanged notes not resent; changed ones replaced
@@ -170,20 +177,21 @@ global.fetch = async (url, op = {}) => {
   const libre = n => [['Actualizado: …'], ['…'], ['', 'Título'], [], ['', 'Grupo', 'Respuestas', '% Avance Director/a']].concat(Array.from({ length: n }, (_, i) => ['', 'G' + i, i, 0.5]));
   const segL = crearSeguimiento('z');
   llamadas = [];
-  await segL.escribir({ EFA: libre(2) }, {}, { EFA: { libre: true, pct: [3] } });
+  await segL.escribir({ Libre: libre(2) }, {}, { Libre: { libre: true, pct: [3] } });
   const rl = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')).cuerpo.requests;
-  check('free layout: 0 frozen rows, all formats cleared, percent only on the given column (from row 3), no bands or bold header',
+  check('free layout, new tab: 0 frozen rows, all formats cleared, percent only on the given column (from row 3), no bands or bold header',
     JSON.stringify(congela(rl)) === '[0]' && rl.some(q => q.repeatCell && q.repeatCell.fields === 'userEnteredFormat' && q.repeatCell.range.startRowIndex === undefined)
     && JSON.stringify(rl.filter(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat && q.repeatCell.cell.userEnteredFormat.numberFormat).map(q => q.repeatCell.range.startColumnIndex + '@' + q.repeatCell.range.startRowIndex)) === '["3@2"]'
     && !rl.some(q => q.repeatCell && /backgroundColor|textFormat/.test(q.repeatCell.fields)));
   llamadas = [];
-  await segL.escribir({ EFA: libre(3) }, {}, { EFA: { libre: true, pct: [3] } });
+  await segL.escribir({ Libre: libre(3) }, {}, { Libre: { libre: true, pct: [3] } });
   const sinCambio = !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values') && l.cuerpo.requests.some(q => q.repeatCell || q.updateSheetProperties));
   llamadas = [];
-  await segL.escribir({ EFA: libre(3) }, {}, { EFA: { libre: true, pct: [3], patron: '0.00%' } });
+  await segL.escribir({ Libre: libre(3) }, {}, { Libre: { libre: true, pct: [3], patron: '0.00%' } });
   const dec = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
-  check('free layout: a new % pattern is applied once (2 decimals)', dec && dec.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat
-    && q.repeatCell.cell.userEnteredFormat.numberFormat && q.repeatCell.cell.userEnteredFormat.numberFormat.pattern === '0.00%'));
+  check('free layout, existing tab: a new % pattern is applied once (2 decimals), number formats only (no clear, no freeze)', dec
+    && dec.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat && q.repeatCell.cell.userEnteredFormat.numberFormat && q.repeatCell.cell.userEnteredFormat.numberFormat.pattern === '0.00%')
+    && dec.cuerpo.requests.filter(q => q.repeatCell).every(q => q.repeatCell.fields === 'userEnteredFormat.numberFormat') && !congela(dec.cuerpo.requests).length);
   check('free layout: more rows, same title and % columns → no formatting request (team colors stay)', sinCambio);
 
   // Header layout with a % pattern (EFA Resumen, 2 decimals); without one the marker stays as before (Test tracker untouched)

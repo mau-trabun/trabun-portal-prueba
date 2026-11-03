@@ -106,7 +106,7 @@ check('Niveles sin docentes: implemented grades with no docente (short labels)',
 check('header notes: what Contactos SF, Respuestas, roles, Otros líderes and the grade block mean',
   /^Contactos vigentes en Salesforce/.test(notaEnc('Contactos SF')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos SF'))
   && /No se muestran: 1 de un programa Control, 1 de un RBD que no está en SF \\(pruebas incluidas\\), 1 de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
-  && !out.notas['Resumen'].some(([r, c, t]) => r === 2 && /sin rol/.test(t)) && /suma de los roles puede superar Respuestas/.test(notaEnc('Director/a resp.'))
+  && !out.notas['Resumen'].some(([r, c, t]) => r === 2 && /sin rol/.test(t)) && !notaEnc('Director/a resp.')
   && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico doc.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
 check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol. La encuesta siempre pide el rol: revísalas.\\n6 respuestas de 5 personas: 1 respondió con más de un rol (cada rol es una respuesta).\\nSe descartó 1 envío repetido (mismo correo y rol); cuenta el más reciente.');
 check('note on Respuestas: "todos los roles", "ambos roles", unknown role, before the opening',

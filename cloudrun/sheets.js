@@ -78,9 +78,9 @@ function letra(n) {
 
 // The team tracker (a separate Sheet, shared with the service account as editor). Each write replaces every tab's
 // values in place (no flash of an empty tab), then clears what is left of a longer previous version.
-// The layout's formatting (frozen rows, bold header, "%" as percent, gray bands per grade) is applied to a new tab and
-// again whenever the layout changes (header, bands or FORMATO_V), tracked by a developer-metadata marker on each tab;
-// otherwise only values are written, so the team's own formatting stays.
+// The layout's formatting (frozen rows, bold header, "%" as percent, gray bands per grade) is applied only to a new tab.
+// On an existing tab a layout change (header, % columns or pattern, FORMATO_V; developer-metadata marker) re-applies
+// number formats only, never colors, bold, borders or frozen rows (Mau 03-11-2026: a redeploy wiped the team's colors).
 const ENC = 2; // 0-based header row of every tracker tab: rows 1–2 are the status lines (seguimiento_() in Code.js)
 const FORMATO_V = 1; // bump to re-apply the formatting to existing tabs once
 const MARCA = 'seguimiento_formato';
@@ -131,6 +131,8 @@ function crearSeguimiento(id) {
         const valor = JSON.stringify(libre ? { v: FORMATO_V, libre, encabezado, pct, patron: patron || '0%' }
           : Object.assign({ v: FORMATO_V, encabezado, gris }, patron ? { patron } : {}));
         const dar = sheetId => (libre ? formatosLibres(sheetId, pct, patron || '0%') : formatos(sheetId, encabezado, gris, patron));
+        // existing tab: number formats only (the team's colors, bold, borders and freezes stay)
+        const numeros = sheetId => (libre ? formatosLibres(sheetId, pct, patron || '0%').slice(2) : formatos(sheetId, encabezado, gris, patron).slice(3 + encabezado.length));
         const marcar = sheetId => (marcas[n]
           ? { updateDeveloperMetadata: { dataFilters: [{ developerMetadataLookup: { metadataId: marcas[n].metadataId } }], developerMetadata: { metadataValue: valor }, fields: 'metadataValue' } }
           : { createDeveloperMetadata: { developerMetadata: { metadataKey: MARCA, metadataValue: valor, location: { sheetId }, visibility: 'DOCUMENT' } } });
@@ -145,7 +147,7 @@ function crearSeguimiento(id) {
           const g = h.gridProperties || {};
           if ((g.rowCount || 0) < alto) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'ROWS', length: alto - (g.rowCount || 0) + 100 } });
           if ((g.columnCount || 0) < ancho) pedidos.push({ appendDimension: { sheetId: h.sheetId, dimension: 'COLUMNS', length: ancho - (g.columnCount || 0) + 2 } });
-          if (!marcas[n] || marcas[n].metadataValue !== valor) pedidos.push(...dar(h.sheetId), marcar(h.sheetId));
+          if (!marcas[n] || marcas[n].metadataValue !== valor) pedidos.push(...numeros(h.sheetId), marcar(h.sheetId));
         }
       });
       if (pedidos.length) await post(':batchUpdate', { requests: pedidos });
