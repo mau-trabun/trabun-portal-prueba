@@ -1044,7 +1044,7 @@ function seguimientoEfa_(d, s, reloj) {
   const tabs = {}, notasT = {}, formato = {};
   tabs[SEG_EFA_TAB] = tab;
   notasT[SEG_EFA_TAB] = notas;
-  formato[SEG_EFA_TAB] = { gris };
+  formato[SEG_EFA_TAB] = { gris, patron: '0.00%' }; // % with 2 decimals (EFA tracker only)
 
   // Por JdP / Por programa (Mau 03-11-2026): laid out like the 2025 tracker's Resumen JdP / Resumen Programa (title,
   // tables from column B, a block per table, Total row, footnote); the team does the colors. Sums of Resumen rows;
@@ -1074,7 +1074,7 @@ function seguimientoEfa_(d, s, reloj) {
     tabs[nombre] = t;
     notasT[nombre] = notasR;
     // free layout: no header band; % columns as percent from the title row down
-    formato[nombre] = { libre: true, pct: SEG_ROLES_EFA.map((_, j) => cResp + 1 + j) };
+    formato[nombre] = { libre: true, pct: SEG_ROLES_EFA.map((_, j) => cResp + 1 + j), patron: '0.00%' }; // 2 decimals, as in 2025
   };
   const porJdp = agrupar_(filas, f => f.sp.jefeProyecto || '');
   resumen(SEG_EFA_JDP, `Resumen de respuestas por Jefe/a de Proyecto · EFA ${anio}`, [{ etiqueta: 'Jefe/a de Proyecto',

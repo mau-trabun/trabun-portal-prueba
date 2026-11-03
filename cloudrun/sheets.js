@@ -94,23 +94,24 @@ function crearSeguimiento(id) {
   // data rows: "%" columns ("%", "Director/a %") as percent, every other column back to automatic
   const col = (sheetId, desde, j) => ({ sheetId, startRowIndex: desde, startColumnIndex: j, endColumnIndex: j + 1 });
   // Free layout (formato.libre, e.g. tables laid out in blocks): nothing frozen, every old format cleared once,
-  // only the formato.pct columns as percent from the header row down; the team adds its own colors after that
-  const formatosLibres = (sheetId, pct) => [
+  // only the formato.pct columns as percent (formato.patron, default 0%) from the header row down; the team adds its own colors after that
+  const formatosLibres = (sheetId, pct, patron) => [
     { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 0 } }, fields: 'gridProperties.frozenRowCount' } },
     { repeatCell: { range: { sheetId }, cell: {}, fields: 'userEnteredFormat' } }]
-    .concat(pct.map(j => ({ repeatCell: { range: col(sheetId, ENC, j), cell: { userEnteredFormat: { numberFormat: { type: 'PERCENT', pattern: '0%' } } }, fields: 'userEnteredFormat.numberFormat' } })));
-  const formatos = (sheetId, encabezado, gris) => [
+    .concat(pct.map(j => ({ repeatCell: { range: col(sheetId, ENC, j), cell: { userEnteredFormat: { numberFormat: { type: 'PERCENT', pattern: patron } } }, fields: 'userEnteredFormat.numberFormat' } })));
+  const formatos = (sheetId, encabezado, gris, patron) => [
     { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: ENC + 1 } }, fields: 'gridProperties.frozenRowCount' } },
     { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: ENC }, cell: { userEnteredFormat: { textFormat: { bold: false } } }, fields: 'userEnteredFormat.textFormat.bold' } },
     { repeatCell: { range: { sheetId, startRowIndex: ENC, endRowIndex: ENC + 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } }]
     .concat(encabezado.map((t, j) => ({ repeatCell: { range: col(sheetId, ENC, j),
       cell: { userEnteredFormat: { backgroundColor: gris.indexOf(j) >= 0 ? GRIS : BLANCO } }, fields: 'userEnteredFormat.backgroundColor' } })))
     .concat(encabezado.map((t, j) => ({ repeatCell: { range: col(sheetId, ENC + 1, j),
-      cell: { userEnteredFormat: /(^| )%$/.test(t) ? { numberFormat: { type: 'PERCENT', pattern: '0%' } } : {} }, fields: 'userEnteredFormat.numberFormat' } })));
+      cell: { userEnteredFormat: /(^| )%$/.test(t) ? { numberFormat: { type: 'PERCENT', pattern: patron || '0%' } } : {} }, fields: 'userEnteredFormat.numberFormat' } })));
   const notasEscritas = {}; // tab → notes last written (with its sheetId), so unchanged notes are not rewritten every 2 min
   return {
     // notas: {tab: [[row, col, text]]} (0-based). Each tab's notes from the header row down are replaced as a whole when they change.
-    // formato: {tab: {gris: [cols]}}: columns shaded gray (header and data); {tab: {libre: true, pct: [cols]}}: free layout.
+    // formato: {tab: {gris: [cols], patron}}: columns shaded gray (header and data), "%" pattern (default 0%);
+    // {tab: {libre: true, pct: [cols], patron}}: free layout.
     async escribir(tabs, notas = {}, formato = {}) {
       const meta = await api(base + '?fields=sheets(properties(title,sheetId,gridProperties),developerMetadata(metadataId,metadataKey,metadataValue))');
       const hojas = {}, marcas = {};
@@ -125,9 +126,11 @@ function crearSeguimiento(id) {
         const filas = tabs[n], alto = filas.length, ancho = filas.reduce((m, r) => Math.max(m, r.length), 1);
         const h = hojas[n];
         const encabezado = filas[ENC] || [], gris = (formato[n] && formato[n].gris) || [];
-        const libre = !!(formato[n] && formato[n].libre), pct = (libre && formato[n].pct) || [];
-        const valor = JSON.stringify(libre ? { v: FORMATO_V, libre, encabezado, pct } : { v: FORMATO_V, encabezado, gris });
-        const dar = sheetId => (libre ? formatosLibres(sheetId, pct) : formatos(sheetId, encabezado, gris));
+        const libre = !!(formato[n] && formato[n].libre), pct = (libre && formato[n].pct) || [], patron = (formato[n] && formato[n].patron) || '';
+        // the pattern joins the marker only when given, so tabs without one (Test tracker) keep their marker and formatting
+        const valor = JSON.stringify(libre ? { v: FORMATO_V, libre, encabezado, pct, patron: patron || '0%' }
+          : Object.assign({ v: FORMATO_V, encabezado, gris }, patron ? { patron } : {}));
+        const dar = sheetId => (libre ? formatosLibres(sheetId, pct, patron || '0%') : formatos(sheetId, encabezado, gris, patron));
         const marcar = sheetId => (marcas[n]
           ? { updateDeveloperMetadata: { dataFilters: [{ developerMetadataLookup: { metadataId: marcas[n].metadataId } }], developerMetadata: { metadataValue: valor }, fields: 'metadataValue' } }
           : { createDeveloperMetadata: { developerMetadata: { metadataKey: MARCA, metadataValue: valor, location: { sheetId }, visibility: 'DOCUMENT' } } });

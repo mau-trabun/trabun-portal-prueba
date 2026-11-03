@@ -197,7 +197,7 @@ check('EFA-EDI consents: one row per cohort + Total EFA-EDI when there are two c
     && tot.Implementaciones === 2 && tot['Respuestas EFA-EDI'] === 4 && tot['Consentimientos negativos'] === 1 && tot['% de consentimientos negativos'] === 0.25 && !sinEdi;
 })());
 check('summary tabs: free layout, % columns (F–J) as percent; no bands', ['Por JdP', 'Por programa'].every(n => out.formato[n].libre === true
-  && out.formato[n].pct.join() === '5,6,7,8,9' && !out.formato[n].gris && out.tabs[n].every(r => r.slice(5, 10).every(v => v === '' || typeof v === 'number' || /^% /.test(v)))));
+  && out.formato[n].pct.join() === '5,6,7,8,9' && out.formato[n].patron === '0.00%' && !out.formato[n].gris && out.formato['Resumen'].patron === '0.00%' && out.tabs[n].every(r => r.slice(5, 10).every(v => v === '' || typeof v === 'number' || /^% /.test(v)))));
 check('summary tabs: no-role count only as a note on Respuestas of the rows that have it (Total included)', (() => {
   const n = out.notas['Por JdP'];
   return !TJ.some(r => r.some(v => /sin rol/i.test(v))) && n.length >= 1 && n.every(([r, c, x]) => c === 4 && TJ[r][4] >= 1

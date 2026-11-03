@@ -178,6 +178,22 @@ global.fetch = async (url, op = {}) => {
     && !rl.some(q => q.repeatCell && /backgroundColor|textFormat/.test(q.repeatCell.fields)));
   llamadas = [];
   await segL.escribir({ EFA: libre(3) }, {}, { EFA: { libre: true, pct: [3] } });
-  check('free layout: more rows, same title and % columns → no formatting request (team colors stay)',
-    !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values') && l.cuerpo.requests.some(q => q.repeatCell || q.updateSheetProperties)));
+  const sinCambio = !llamadas.some(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values') && l.cuerpo.requests.some(q => q.repeatCell || q.updateSheetProperties));
+  llamadas = [];
+  await segL.escribir({ EFA: libre(3) }, {}, { EFA: { libre: true, pct: [3], patron: '0.00%' } });
+  const dec = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values'));
+  check('free layout: a new % pattern is applied once (2 decimals)', dec && dec.cuerpo.requests.some(q => q.repeatCell && q.repeatCell.cell.userEnteredFormat
+    && q.repeatCell.cell.userEnteredFormat.numberFormat && q.repeatCell.cell.userEnteredFormat.numberFormat.pattern === '0.00%'));
+  check('free layout: more rows, same title and % columns → no formatting request (team colors stay)', sinCambio);
+
+  // Header layout with a % pattern (EFA Resumen, 2 decimals); without one the marker stays as before (Test tracker untouched)
+  const segP = crearSeguimiento('z');
+  const conPct = [['Actualizado: …'], ['…'], ['RBD', 'Director/a %']];
+  llamadas = [];
+  await segP.escribir({ P: conPct }, {}, { P: { gris: [], patron: '0.00%' } });
+  const pp = llamadas.find(l => l.ruta.endsWith(':batchUpdate') && !l.ruta.includes('values')).cuerpo.requests;
+  check('header layout: "%" columns take formato.patron (0.00%)', pp.some(q => q.repeatCell && q.repeatCell.range.startColumnIndex === 1
+    && q.repeatCell.cell.userEnteredFormat.numberFormat && q.repeatCell.cell.userEnteredFormat.numberFormat.pattern === '0.00%'));
+  check('header layout without a pattern: marker has no patron (existing Test tracker tabs are not reformatted)',
+    !('patron' in JSON.parse(hojas.Resumen.marca.metadataValue)));
 })();
