@@ -14,6 +14,7 @@ const TABS = {
   respTest: 'Respuestas Test',
   respEfa: 'Respuestas EFA',
   sinTest: 'Sin Test',
+  letras: 'Letras',
 };
 
 const TZ = 'America/Santiago';
@@ -115,7 +116,33 @@ function cargarDatos_() {
     test: intentar_(TABS.respTest, () => leerRespuestasTest_(formularios), null),
     efa: intentar_(TABS.respEfa, () => leerRespuestasEfa_(formularios), null),
     habilitados: intentar_(TABS.sinTest, leerHabilitados_, {}),
+    letras: intentar_(TABS.letras, leerLetras_, {}),
   };
+}
+
+// "Letras" tab (manual, optional; created by prepararLetras()): a school's real class letters for a grade, when they
+// aren't A, B, C… from SF CxN (e.g. A, D). RBD | Nivel | Letras | ASE | REL: a row applies to the programs ticked;
+// nothing ticked = not used. Missing tab or a row that can't be read = SF letters.
+const LETRAS_ENCABEZADOS = ['RBD', 'Nivel', 'Letras', 'ASE', 'REL'];
+function leerLetras_() {
+  const out = {};
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.letras)) return out;
+  const t = leerTabla_(TABS.letras);
+  const cR = colExacta_(t, 'RBD'), cN = colExacta_(t, 'Nivel'), cL = colExacta_(t, 'Letras');
+  const cProg = { ase: colExacta_(t, 'ASE'), rel: colExacta_(t, 'REL') };
+  t.rows.forEach(r => {
+    const rbd = normRbd_(r[cR]), i = nivelIdx_(r[cN]);
+    const letras = String(r[cL] == null ? '' : r[cL]).split(/[\s,;/]+/).filter(x => x !== 'y').map(letra_).filter(Boolean)
+      .filter((l, k, a) => a.indexOf(l) === k).sort();
+    if (!rbd || i < 0 || !letras.length) return;
+    ['ase', 'rel'].forEach(p => { if (esVerdadero_(r[cProg[p]])) out[`${rbd}|${i}|${p}`] = letras; });
+  });
+  return out;
+}
+
+// Letters from the Letras tab for this school-program and grade, or null
+function letrasDe_(d, rbd, programa, i) {
+  return (d.letras || {})[`${rbd}|${i}|${programa}`] || null;
 }
 
 // "Sin Test" tab (written by listarSinTest()): school-programs ticked in Habilitar see their group's Test links
@@ -384,7 +411,7 @@ function panelPrograma_(rbd, p, d, studentId) {
     habilitado: !!(d.habilitados && d.habilitados[rbd + '|' + p.programa]) };
   if (d.test) {
     Object.assign(test, bloqueTest_(p, testIdx,
-      d.test.filter(x => x.rbd === rbd && x.programa === p.programa), studentId));
+      d.test.filter(x => x.rbd === rbd && x.programa === p.programa), studentId, i => letrasDe_(d, rbd, p.programa, i)));
   }
   const efa = { ok: !!d.efa, links: links_(formulariosDe_(d.formularios, 'efa', p), rbd, d.sf[rbd]) };
   if (d.efa) {
@@ -486,7 +513,7 @@ function links_(forms, rbd, col) {
     .filter(l => l.link);
 }
 
-function bloqueTest_(p, testIdx, resps, studentId) {
+function bloqueTest_(p, testIdx, resps, studentId, letrasDe) {
   const porNivel = agrupar_(resps, x => x.nivel);
   const registrados = p.implementados.filter(i => testIdx.indexOf(i) >= 0);
   const vistos = Object.keys(porNivel).map(Number)
@@ -499,7 +526,7 @@ function bloqueTest_(p, testIdx, resps, studentId) {
       registrado: reg,
       est: reg && p.alumnos[i] > 0 ? p.alumnos[i] : null,
       r: lista.length,
-      cursos: cursos_(p, i, lista, studentId),
+      cursos: cursos_(p, i, lista, studentId, letrasDe ? letrasDe(i) : null),
     };
   });
   const resumen = { r: 0, rConEst: 0, est: 0 };
@@ -510,18 +537,20 @@ function bloqueTest_(p, testIdx, resps, studentId) {
   return { resumen, niveles };
 }
 
-function cursos_(p, i, resps, studentId) {
-  const registradas = LETRAS.slice(0, Math.min(p.cxn[i], LETRAS.length));
+// propias: the school's letters from the Letras tab (replace A, B, C… from CxN; the estimate is split among them)
+function cursos_(p, i, resps, studentId, propias) {
+  const registradas = propias || LETRAS.slice(0, Math.min(p.cxn[i], LETRAS.length));
+  const nCursos = propias ? propias.length : p.cxn[i];
   const porLetra = agrupar_(resps, x => x.letra || '');
   const extra = Object.keys(porLetra).filter(l => l && registradas.indexOf(l) < 0).sort();
   const letras = registradas.concat(extra);
   if (porLetra['']) letras.push('');
-  const porCurso = p.cxn[i] > 0 && p.alumnos[i] > 0 ? Math.round(p.alumnos[i] / p.cxn[i]) : 0;
+  const porCurso = nCursos > 0 && p.alumnos[i] > 0 ? Math.round(p.alumnos[i] / nCursos) : 0;
 
   return letras.map(l => {
     const lista = porLetra[l] || [];
     const reg = registradas.indexOf(l) >= 0;
-    // est: SF Alumnos ÷ CxN for the grade (an average per class), only for SF letters with both values
+    // est: SF Alumnos ÷ CxN (or ÷ the Letras count) for the grade (an average per class), only for registered letters
     const curso = { letra: l || null, registrado: reg, r: lista.length, est: reg && porCurso ? porCurso : null };
     if (studentId === 'numero') {
       const numeros = lista.map(x => x.numero).filter(n => n != null).sort((a, b) => a - b);
@@ -761,7 +790,7 @@ function seguimiento_(d, s, reloj) {
       const nivel = NIVELES[i], n = t.niveles.find(x => x.nivel === nivel);
       const cR = base + 2 * k, cE = cR + 1;
       if (!n) { if (t.nivelesPapel.indexOf(nivel) >= 0) notasR.push([fila, cR, 'Test en papel · a cargo de la Agencia Focus.']); return; }
-      if (!n.registrado) notasR.push([fila, cE, `Fuera de lo registrado: ${porQue(p, t, nivel)}, pero hay ${resp(n.r)}. Cuentan en Respuestas, no en el %.`]);
+      if (!n.registrado) notasR.push([fila, cE, `Fuera de lo registrado: ${porQue(p, t, nivel)}, pero hay ${resp(n.r)}. ${n.r === 1 ? 'Cuenta' : 'Cuentan'} en Respuestas, no en el %.`]);
       else if (!n.est) notasR.push([fila, cE, 'Sin estimado: SF no tiene Alumnos para este nivel. No cuenta en el %.']);
       else if (n.r > n.est) notasR.push([fila, cR, `${miles(n.r - n.est)} sobre lo estimado (estimado: ${miles(n.est)}).`]);
     });
@@ -792,10 +821,11 @@ function seguimiento_(d, s, reloj) {
         notasC.push([fc, cC.reg, `Curso no registrado: ${porQue(p, t, n.nivel)}.`]);
       } else if (!c.registrado) {
         const reg = n.cursos.filter(x => x.registrado).map(x => x.letra);
-        notasC.push([fc, cC.reg, reg.length ? `Curso no registrado: SF tiene ${reg.length} ${reg.length === 1 ? 'curso' : 'cursos'} en ${n.nivel} (${reg.join(', ')}).`
+        notasC.push([fc, cC.reg, letrasDe_(d, f.rbd, p.programa, nivelIdx_(n.nivel)) ? `Curso no registrado: la pestaña Letras tiene ${reg.join(', ')} en ${n.nivel}.`
+          : reg.length ? `Curso no registrado: SF tiene ${reg.length} ${reg.length === 1 ? 'curso' : 'cursos'} en ${n.nivel} (${reg.join(', ')}).`
           : `Curso no registrado: SF no tiene cursos (CxN) para ${n.nivel}.`]);
       } else if (!c.est) {
-        notasC.push([fc, cC.est, 'Sin estimado: falta Alumnos o CxN en SF.']);
+        notasC.push([fc, cC.est, letrasDe_(d, f.rbd, p.programa, nivelIdx_(n.nivel)) ? 'Sin estimado: falta Alumnos en SF.' : 'Sin estimado: falta Alumnos o CxN en SF.']);
       } else if (c.r > c.est) {
         notasC.push([fc, cC.r, `${miles(c.r - c.est)} sobre lo estimado.`]);
       }
@@ -934,14 +964,14 @@ function seguimientoEfa_(d, s, reloj) {
   };
 
   // Header notes: what a column means
-  const noMuestran = [fuera.control && pl(fuera.control, 'de un programa Control', 'de programas Control'),
-    fuera.sf && pl(fuera.sf, 'de un RBD que no está en SF (pruebas incluidas)', 'de RBD que no están en SF (pruebas incluidas)'),
-    fuera.programa && pl(fuera.programa, 'de un programa que el colegio no tiene en SF', 'de un programa que el colegio no tiene en SF')].filter(Boolean);
+  const noMuestran = [fuera.control && pl(fuera.control, 'respuesta de un programa Control', 'respuestas de programas Control'),
+    fuera.sf && pl(fuera.sf, 'respuesta de un RBD que no está en SF (pruebas incluidas)', 'respuestas de RBD que no están en SF (pruebas incluidas)'),
+    fuera.programa && pl(fuera.programa, 'respuesta de un programa que el colegio no tiene en SF', 'respuestas de programas que el colegio no tiene en SF')].filter(Boolean);
   nota(2, col('Ingresos desde la apertura'), [`Ingresos al portal${abre ? ' desde el ' + ddmm(abre) : ''}, en cualquier pestaña. Las vistas internas no cuentan.`]);
   nota(2, col('Contactos SF'), [s.contactos ? 'Contactos vigentes en Salesforce (reporte «Contactos EFA \'26 (seguimiento)», actualización diaria). Un contacto con varios roles cuenta en cada uno. Si un número no calza, corrígelo en Salesforce.'
     : `Falta la pestaña ${TAB_CONTACTOS_EFA} en la planilla: sin esperados.`,
   sinColegio ? pl(sinColegio, 'contacto no tiene colegio en Salesforce y no se puede asignar.', 'contactos no tienen colegio en Salesforce y no se pueden asignar.') : '']);
-  nota(2, col('Respuestas'), ['Respuestas después de quitar envíos repetidos (mismo correo y rol; cuenta el más reciente). Cada rol es una respuesta.',
+  nota(2, col('Respuestas'), ['Respuestas después de quitar envíos repetidos (mismo correo y rol; cuenta el más reciente). Quien responde más de una vez la encuesta, con un rol distinto cada vez, suma una respuesta por envío; una opción con varios roles («Encargado/a y Mentor/a», «Cumplo todos los roles») es una sola respuesta.',
     noMuestran.length ? 'No se muestran: ' + noMuestran.join(', ') + '.' : '']);
   nota(2, cRol + 9, ['Otro/a líder y, en EFA-EDI, Equipo Directivo / Convivencia Escolar (en el portal aparece en Dirección).']);
   nota(2, cNiv, ['ASE: niveles implementados sin respuestas de docentes.']);
@@ -966,19 +996,20 @@ function seguimientoEfa_(d, s, reloj) {
 
     // Respuestas: why the numbers don't add up
     const conCorreo = vig.filter(x => x.correo), personas = new Set(conCorreo.map(x => x.correo)).size + vig.length - conCorreo.length;
+    const porCorreoR = agrupar_(conCorreo, x => x.correo), variasVeces = Object.keys(porCorreoR).filter(k => porCorreoR[k].length > 1).length;
     const conteo = corto => vig.filter(x => rolSeg(x) === corto).length;
     const todos = conteo('Encargado/a, Mentor/a y Docente'), ambos = conteo('Encargado/a y Mentor/a');
     const desconocidos = vig.filter(x => rolSeg(x) && !ROLES_SEG_EFA[rolSeg(x)]).map(rolSeg).filter((v, i, a) => a.indexOf(v) === i);
     const antes = abre ? vig.filter(x => x.fecha != null && dia(x.fecha) < abre).length : 0;
     const repetidos = f.resps.length - vig.length;
     nota(fila, col('Respuestas'), [
-      sinRolTexto(sinRol) + (sinRol && !sp.edi ? ' La encuesta siempre pide el rol: revísalas.' : ''),
-      vig.length > personas ? `${pl(vig.length, 'respuesta', 'respuestas')} de ${pl(personas, 'persona', 'personas')}: ${pl(vig.length - personas, 'respondió', 'respondieron')} con más de un rol (cada rol es una respuesta).` : '',
-      repetidos ? `Se ${repetidos === 1 ? 'descartó 1 envío repetido' : 'descartaron ' + miles(repetidos) + ' envíos repetidos'} (mismo correo y rol); cuenta el más reciente.` : '',
-      todos ? `${pl(todos, 'respuesta «Cumplo todos los roles» cuenta', 'respuestas «Cumplo todos los roles» cuentan')} en Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.` : '',
-      ambos ? `${pl(ambos, 'respuesta «Encargado/a y Mentor/a» cuenta', 'respuestas «Encargado/a y Mentor/a» cuentan')} en ambos roles; en Respuestas, una vez.` : '',
+      sinRolTexto(sinRol) + (sinRol && !sp.edi ? ` La encuesta siempre pide el rol: ${sinRol === 1 ? 'revísala' : 'revísalas'}.` : ''),
+      vig.length > personas ? `${pl(vig.length, 'respuesta', 'respuestas')} de ${pl(personas, 'persona', 'personas')}: ${pl(variasVeces, 'persona respondió', 'personas respondieron')} más de una vez la encuesta, con un rol distinto cada vez; cada envío cuenta como una respuesta.` : '',
+      repetidos ? `Se ${repetidos === 1 ? 'descartó 1 envío repetido' : 'descartaron ' + miles(repetidos) + ' envíos repetidos'} (mismo correo y rol); de cada persona y rol cuenta el envío más reciente.` : '',
+      todos ? `${pl(todos, 'respuesta «Cumplo todos los roles» cuenta', 'respuestas «Cumplo todos los roles» cuentan')} en las columnas Encargado/a, Mentor/a y Docentes; en Respuestas, ${todos === 1 ? 'una vez' : 'una vez cada una'}. La encuesta no le pregunta niveles.` : '',
+      ambos ? `${pl(ambos, 'respuesta «Encargado/a y Mentor/a» cuenta', 'respuestas «Encargado/a y Mentor/a» cuentan')} en las columnas Encargado/a y Mentor/a; en Respuestas, ${ambos === 1 ? 'una vez' : 'una vez cada una'}.` : '',
       desconocidos.map(t => `Rol no reconocido «${t}»: cuenta en Otros líderes.`).join('\n'),
-      antes ? `${pl(antes, 'respuesta anterior', 'respuestas anteriores')} a la apertura (${ddmm(abre)}): posibles pruebas.` : '',
+      antes ? `${pl(antes, 'respuesta anterior', 'respuestas anteriores')} a la apertura (${ddmm(abre)}): ${antes === 1 ? 'posible prueba' : 'posibles pruebas'}.` : '',
       !p.efa.links.length ? 'Sin link EFA en Formularios para este programa.' : '']);
     if (!s.enviadosEfa[f.rbd] && normTexto_(sp.modelo) === 'cuadernillos') nota(fila, col('Correo enviado'), ['Cuadernillos: el correo de la EFA se envía a mano.']);
 
@@ -994,7 +1025,8 @@ function seguimientoEfa_(d, s, reloj) {
     if (lista) {
       const porCorreo = agrupar_(lista.filter(x => x.correo), x => x.correo);
       const rep = Object.keys(porCorreo).map(k => porCorreo[k]).filter(g => g.length > 1);
-      const mismoRol = rep.filter(g => g.every(x => x.rol === g[0].rol)).length;
+      const mismoRol = rep.filter(g => g[0].rol && g.every(x => x.rol === g[0].rol)).length;
+      const todosSinRol = rep.filter(g => g.every(x => !x.rol)).length;
       const unoSinRol = rep.filter(g => g.some(x => !x.rol) && g.some(x => x.rol)).length;
       const distintos = rep.filter(g => g.every(x => x.rol) && g.some(x => x.rol !== g[0].rol));
       const combos = distintos.map(g => g.map(x => '«' + x.rol + '»').filter((v, i, a) => a.indexOf(v) === i).join(' y ')).filter((v, i, a) => a.indexOf(v) === i);
@@ -1005,10 +1037,11 @@ function seguimientoEfa_(d, s, reloj) {
       nota(fila, col('Contactos SF'), [
         !lista.length ? 'Sin contactos en Salesforce para esta implementación.' : '',
         mismoRol ? `${pl(mismoRol, 'correo aparece', 'correos aparecen')} más de una vez con el mismo rol: ${mismoRol === 1 ? 'cuenta' : 'cuentan'} cada vez. Si es la misma persona, corrígelo en Salesforce.` : '',
-        unoSinRol ? `${pl(unoSinRol, 'correo aparece', 'correos aparecen')} dos veces, una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.` : '',
-        distintos.length ? `${pl(distintos.length, 'correo tiene', 'correos tienen')} dos roles en filas distintas (${combos.join('; ')}): ${distintos.length === 1 ? 'cuenta' : 'cuentan'} en ambos. Si no corresponde, corrígelo en Salesforce.` : '',
+        todosSinRol ? `${pl(todosSinRol, 'correo aparece', 'correos aparecen')} más de una vez, siempre sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.` : '',
+        unoSinRol ? `${pl(unoSinRol, 'correo aparece', 'correos aparecen')} más de una vez, al menos una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.` : '',
+        distintos.length ? `${pl(distintos.length, 'correo tiene', 'correos tienen')} roles distintos en filas distintas (${combos.join('; ')}): ${distintos.length === 1 ? 'cuenta' : 'cuentan'} en cada rol. Si no corresponde, corrígelo en Salesforce.` : '',
         sinRolSF ? `${pl(sinRolSF, 'contacto', 'contactos')} sin Rol en la Implementación en Salesforce: no ${sinRolSF === 1 ? 'cuenta' : 'cuentan'} en ningún esperado. Complétalo en Salesforce.` : '',
-        enOtro ? `${pl(enOtro, 'contacto también aparece', 'contactos también aparecen')} en otro colegio (RBD ${otros.join(', ')}).` : '']);
+        enOtro ? `${pl(enOtro, 'correo también aparece', 'correos también aparecen')} en ${otros.length === 1 ? 'otro colegio' : 'otros colegios'} (RBD ${otros.join(', ')}).` : '']);
     }
 
     // ASE docentes by grade
@@ -1373,6 +1406,29 @@ function listarSinTest() {
   }
   const habilitados = filas.filter(f => f[COLS_SIN_TEST.length - 1] === true).length;
   const texto = `${TABS.sinTest}: ${filas.length} colegio-programa sin niveles con Test en línea (${habilitados} habilitados).`;
+  console.log(texto);
+  return texto;
+}
+
+/**
+ * Creates the Letras tab (headers, ASE / REL checkboxes, a note on each header) so the team can type a school's real
+ * class letters. Does nothing if the tab already exists.
+ */
+function prepararLetras() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss.getSheetByName(TABS.letras)) return `${TABS.letras}: ya existe, no la modifiqué`;
+  const sh = ss.insertSheet(TABS.letras, ss.getNumSheets());
+  const filas = 300;
+  sh.getRange(1, 1, 1, LETRAS_ENCABEZADOS.length).setValues([LETRAS_ENCABEZADOS]).setFontWeight('bold').setNotes([[
+    'RBD del colegio, solo el número (sin dígito verificador).',
+    'Nivel como en el portal: «I° medio», «4° básico» (el signo °, las tildes y las mayúsculas dan igual).',
+    'Las letras reales de los cursos de ese nivel, separadas por coma: «A, D». Reemplazan las que el portal deduce de los cursos en SF (A, B, C…). El estimado por curso se reparte entre estas letras.',
+    'Marca si la fila vale para ASE.',
+    'Marca si la fila vale para Religión. Una fila sin ningún programa marcado no se usa. Si una fila no se puede leer (nivel o letras mal escritos), ese nivel queda con las letras de SF.',
+  ]]);
+  sh.setFrozenRows(1);
+  sh.getRange(2, 4, filas, 2).insertCheckboxes();
+  const texto = `${TABS.letras}: creada con ${filas} filas para completar`;
   console.log(texto);
   return texto;
 }

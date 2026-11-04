@@ -105,15 +105,15 @@ check('ASE docentes by grade: count per declared grade, CxN as cursos; outside t
 check('Niveles sin docentes: implemented grades with no docente (short labels)', a['Niveles sin docentes'] === '1°, 2°, 3°, 4°, 7°, 8°' && f['Niveles sin docentes'] === '7°, 8°, I°, II°, III°, IV°');
 check('header notes: what Contactos SF, Respuestas, roles, Otros líderes and the grade block mean',
   /^Contactos vigentes en Salesforce/.test(notaEnc('Contactos SF')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos SF'))
-  && /No se muestran: 1 de un programa Control, 1 de un RBD que no está en SF \\(pruebas incluidas\\), 1 de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
+  && /No se muestran: 1 respuesta de un programa Control, 1 respuesta de un RBD que no está en SF \\(pruebas incluidas\\), 1 respuesta de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
   && !out.notas['Resumen'].some(([r, c, t]) => r === 2 && /sin rol/.test(t)) && !notaEnc('Director/a resp.')
   && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico doc.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
-check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol. La encuesta siempre pide el rol: revísalas.\\n6 respuestas de 5 personas: 1 respondió con más de un rol (cada rol es una respuesta).\\nSe descartó 1 envío repetido (mismo correo y rol); cuenta el más reciente.');
+check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol. La encuesta siempre pide el rol: revísala.\\n6 respuestas de 5 personas: 1 persona respondió más de una vez la encuesta, con un rol distinto cada vez; cada envío cuenta como una respuesta.\\nSe descartó 1 envío repetido (mismo correo y rol); de cada persona y rol cuenta el envío más reciente.');
 check('note on Respuestas: "todos los roles", "ambos roles", unknown role, before the opening',
-  nota(11111, 'REL', 'Respuestas') === '1 respuesta «Cumplo todos los roles» cuenta en Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.\\n'
-  + '1 respuesta «Encargado/a y Mentor/a» cuenta en ambos roles; en Respuestas, una vez.\\nRol no reconocido «Inspector/a general»: cuenta en Otros líderes.\\n'
-  + '1 respuesta anterior a la apertura (02-11-2026): posibles pruebas.');
-check('no role: outside EFA-EDI "revísalas"; inside EFA-EDI only the count, never why', /revísalas/.test(nota(11111, 'ASE', 'Respuestas')) && !/revísalas|consent|acept|estudio/i.test(nota(22222, 'ASE', 'Respuestas')));
+  nota(11111, 'REL', 'Respuestas') === '1 respuesta «Cumplo todos los roles» cuenta en las columnas Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.\\n'
+  + '1 respuesta «Encargado/a y Mentor/a» cuenta en las columnas Encargado/a y Mentor/a; en Respuestas, una vez.\\nRol no reconocido «Inspector/a general»: cuenta en Otros líderes.\\n'
+  + '1 respuesta anterior a la apertura (02-11-2026): posible prueba.');
+check('no role: outside EFA-EDI "revísala(s)"; inside EFA-EDI only the count, never why', /revísala/.test(nota(11111, 'ASE', 'Respuestas')) && !/revísala|consent|acept|estudio/i.test(nota(22222, 'ASE', 'Respuestas')));
 check('note on Docentes resp.: several grades and no grade; merged with another note on the same cell', nota(11111, 'ASE', 'Docentes resp.') === 'Docentes: 3. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno; 1 sin nivel declarado.'
   && nota(22222, 'ASE', 'Docentes resp.') === '1 sobre lo esperado (esperado: 1).\\nDocentes: 2. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno.'); // two notes on one cell: merged
 check('notes per role: above what SF has; no SF contact with the role; no Encargado/a in SF',
@@ -122,9 +122,9 @@ check('notes per role: above what SF has; no SF contact with the role; no Encarg
   && !nota(11111, 'ASE', 'Docentes resp.').includes('sobre lo esperado'));
 check('notes on Contactos SF: repeated email (same role / one without role / two roles), no role, also in another school',
   nota(11111, 'ASE', 'Contactos SF') === '1 correo aparece más de una vez con el mismo rol: cuenta cada vez. Si es la misma persona, corrígelo en Salesforce.\\n'
-  + '1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.\\n1 contacto también aparece en otro colegio (RBD 22222).'
-  && nota(11111, 'REL', 'Contactos SF') === '1 correo aparece dos veces, una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.\\n'
-  + '1 correo tiene dos roles en filas distintas («Docente y Mentor/a» y «Otro»): cuenta en ambos. Si no corresponde, corrígelo en Salesforce.\\n1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.');
+  + '1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.\\n1 correo también aparece en otro colegio (RBD 22222).'
+  && nota(11111, 'REL', 'Contactos SF') === '1 correo aparece más de una vez, al menos una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.\\n'
+  + '1 correo tiene roles distintos en filas distintas («Docente y Mentor/a» y «Otro»): cuenta en cada rol. Si no corresponde, corrígelo en Salesforce.\\n1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.');
 check('note on a grade outside the registered ones', nota(11111, 'ASE', 'I° medio cursos') === 'Fuera de lo registrado: SF no tiene este nivel en el programa, pero 1 docente lo declaró.');
 check('gray blocks: Director/a, Mentor/a, Docentes (3 columns each), then every other grade pair',
   out.formato['Resumen'].gris.slice(0, 9).map(c => h[c]).join() === 'Director/a resp.,Director/a esp.,Director/a %,Mentor/a resp.,Mentor/a esp.,Mentor/a %,Docentes resp.,Docentes esp.,Docentes %'
@@ -209,5 +209,23 @@ check('summary tabs without Contactos EFA: % blank, counts kept', (() => {
   return ROLES.every(r => tot['% Avance ' + r] === '') && typeof tot.Respuestas === 'number' && tot.Respuestas > 0;
 })());
 check('EFA responses unreadable → null (keep the previous tracker)', ctx.seguimientoEfa_(Object.assign({}, d, { efa: null }), s, reloj) === null);
+check('counts in the notes: one person with three roles is 1 persona; three roles for one email and two other schools read right', (() => {
+  const nR = sheets['Respuestas EFA'].length, nC = sheets['Contactos EFA'].length;
+  const REL = 'Docente que implementa el Programa de Religión de Trabün';
+  sheets['Respuestas EFA'].push(['ASE Semi-intensivo', '2026-11-03T17:00:00', 'Tres', 'Roles', 'tres@ejemplo.cl', FARO, 'Director/a del establecimiento', '-'],
+    ['ASE Semi-intensivo', '2026-11-03T17:05:00', 'Tres', 'Roles', 'tres@ejemplo.cl', FARO, 'Mentor/a, es decir, acompaño y retroalimento a docentes que implementan el Programa', '-'],
+    ['ASE Semi-intensivo', '2026-11-03T17:10:00', 'Tres', 'Roles', 'tres@ejemplo.cl', FARO, 'Otro/a líder', '-']);
+  sheets['Contactos EFA'].push(contacto(FARO, 'ASE', 'Director/a', 'x3@ejemplo.invalid'), contacto(FARO, 'ASE', 'Mentor/a', 'x3@ejemplo.invalid'), contacto(FARO, 'ASE', 'Otro', 'x3@ejemplo.invalid'),
+    contacto(FARO, 'ASE', '', 'sr2@ejemplo.invalid'), contacto(FARO, 'ASE', '', 'sr2@ejemplo.invalid'),
+    contacto(AROMOS, 'ASE', 'Docente', 'c11@ejemplo.invalid'), contacto('Cerro Falso - Liceo Control - 33333', 'ASE', 'Docente', 'c11@ejemplo.invalid'));
+  const o = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj), TT = o.tabs['Resumen'], hh = TT[2];
+  const n = c => (o.notas['Resumen'].find(([r, j]) => TT[r][0] === 22222 && TT[r][2] === 'ASE' && hh[j] === c) || [])[2] || '';
+  sheets['Respuestas EFA'].length = nR; sheets['Contactos EFA'].length = nC;
+  const R = n('Respuestas'), C = n('Contactos SF');
+  return / personas: 1 persona respondió más de una vez la encuesta, con un rol distinto cada vez/.test(R)
+    && C.includes('1 correo tiene roles distintos en filas distintas («Director/a» y «Mentor/a» y «Otro»): cuenta en cada rol')
+    && C.includes('1 correo aparece más de una vez, siempre sin Rol en la Implementación') && !C.includes('mismo rol')
+    && C.includes('en otros colegios (RBD 11111, 33333)');
+})());
 check('the Test tracker is unchanged by the EFA sources', Object.keys(ctx.seguimiento_(d, s, reloj).tabs).join() === 'Resumen,Por curso');
 `);

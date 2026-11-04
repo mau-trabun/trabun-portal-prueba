@@ -72,8 +72,8 @@ check('no names or emails anywhere', !/Rojas|Martina|Bravo|Muñoz|ejemplo/.test(
 // Cell notes: the portal's wording plus why, on the cell that shows the flag
 const nota = (tab, rbd, prog, col, extra) => (out.notas[tab].find(([r, c]) => { const x = out.tabs[tab][r]; return x[0] === rbd && x[2] === prog
   && out.tabs[tab][2][c] === col && (!extra || extra(x)); }) || [])[2];
-check('note: grade outside SF on its est. cell, with the count and the % rule', nota('Resumen', 11111, 'ASE', 'IV° medio est.') === 'Fuera de lo registrado: SF no tiene este nivel en el programa, pero hay 1 respuesta. Cuentan en Respuestas, no en el %.');
-check('note: EDI paper grade with online answers says why; paper cells say Agencia Focus', nota('Resumen', 22222, 'ASE', '8° básico est.') === 'Fuera de lo registrado: este nivel hace el test en papel (Agencia Focus), pero hay 1 respuesta. Cuentan en Respuestas, no en el %.'
+check('note: grade outside SF on its est. cell, with the count and the % rule', nota('Resumen', 11111, 'ASE', 'IV° medio est.') === 'Fuera de lo registrado: SF no tiene este nivel en el programa, pero hay 1 respuesta. Cuenta en Respuestas, no en el %.');
+check('note: EDI paper grade with online answers says why; paper cells say Agencia Focus', nota('Resumen', 22222, 'ASE', '8° básico est.') === 'Fuera de lo registrado: este nivel hace el test en papel (Agencia Focus), pero hay 1 respuesta. Cuenta en Respuestas, no en el %.'
   && nota('Resumen', 22222, 'ASE', '5° básico resp.') === 'Test en papel · a cargo de la Agencia Focus.');
 check('note: % explains it only uses grades with an estimate', nota('Resumen', 11111, 'ASE', '%') === 'El % considera solo los niveles con estimado: 6 de 7 respuestas.');
 check('note: unregistered class letter lists the SF classes; grade outside SF; no letter', nota('Por curso', 11111, 'ASE', 'Registrado', x => x[7] === '4° C') === 'Curso no registrado: SF tiene 2 cursos en 4° básico (A, B).'
