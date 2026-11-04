@@ -254,6 +254,7 @@
     /* ── INSTRUCTIVO IMPRIMIBLE ─────────────────────────── */
     .btn-borde{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-head);font-weight:700;font-size:14px;background:#fff;color:var(--tinta);border:1.5px solid var(--borde-input);padding:9px 17px;border-radius:999px;transition:border-color 120ms}
     .btn-borde:hover{border-color:var(--tinta)}
+    a.btn-borde{text-decoration:none}
     .compartir-nota{font-size:12.5px;line-height:1.45;color:var(--muted)}
     #imprimible{display:none}
     .inst{font-family:var(--f-body);color:var(--tinta);font-size:10.5pt;line-height:1.4}
@@ -3361,7 +3362,29 @@ window.qrcode=qrcode;
         + sinNiveles
         + buscar
         + `<div id="est-${prog.programa}">${contenidoTest(prog)}</div>`
+        + seccionDescriptor(prog)
         + seccionCompartir(prog, "test");
+    }
+
+    // Descriptor PDFs, one per program (static files in docs/descriptores/): what the test measures, how it is applied
+    // and what the school gets. Before the share section, every phase, while the program has a Test grade (online or paper).
+    const DESCRIPTORES = {
+      ase: { archivo: "descriptores/ase-2026.pdf", descarga: "Descriptor Test de Estudiantes ASE 2026.pdf" },
+      rel: { archivo: "descriptores/rel-2026.pdf", descarga: "Descriptor Test de Estudiantes Religión 2026.pdf" },
+    };
+    function seccionDescriptor(prog) {
+      const d = DESCRIPTORES[prog.programa], t = prog.test;
+      if (!d || !((t.niveles || []).length || (t.nivelesPapel || []).length)) return "";
+      return `<section class="compartir descriptor" aria-label="Documento descriptor del Test">
+        <div>
+          <div class="compartir-titulo"><span class="punto"></span>Documento descriptor del Test</div>
+          <div class="compartir-sub">Qué evalúa el Test de Estudiantes, cómo se aplica y qué recibe el colegio. Para el equipo directivo y los docentes.</div>
+        </div>
+        <div class="botones">
+          <a class="btn-borde" href="${d.archivo}" target="_blank" rel="noopener">${ICONOS.test}Ver documento</a>
+          <a class="btn-borde" href="${d.archivo}" download="${esc(d.descarga)}">${ICONOS.descargar}Descargar PDF</a>
+        </div>
+      </section>`;
     }
 
     // Search results or the grade accordion (re-rendered alone while typing, so the input keeps focus)
