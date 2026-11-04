@@ -82,10 +82,57 @@ function pideFresco(cuerpo) {
 // during Code.js SEG_HORARIO (Santiago time, school hours), otherwise once per clock hour (first snapshot of the hour).
 // seguimientoEfa: same, for the EFA tracker (its own Sheet).
 // ahora: clock, for tests.
+// Guard against a half-loaded import (IMPORTRANGE reloading, a compilado tab being rewritten), per school: a school with
+// fewer rows than in the copy being served keeps its previous rows of that survey, while every other school gets the
+// new copy. A response tab that can't be read keeps the whole previous survey. A drop still there after
+// GUARDA.minLecturas reads and GUARDA.minMs is accepted (test responses deleted on purpose). Counts only in the log.
+const GUARDA = { minLecturas: 3, minMs: 30 * 60 * 1000 };
+
+// nuevo, previo: cargarDatos_() results; sospechas: { 'test|<rbd>' | 'test|*': { desde, lecturas } }, kept between snapshots
+function protegerRespuestas(nuevo, previo, sospechas, ahoraMs, log) {
+  if (!previo) return nuevo;
+  // true = hold (keep the previous rows), false = take the new ones
+  const retener = clave => {
+    const s = sospechas[clave] || (sospechas[clave] = { desde: ahoraMs, lecturas: 0 });
+    s.lecturas++;
+    if (s.lecturas >= GUARDA.minLecturas && ahoraMs - s.desde >= GUARDA.minMs) { delete sospechas[clave]; return false; }
+    return true;
+  };
+  const soltar = clave => { const habia = !!sospechas[clave]; delete sospechas[clave]; return habia; };
+  ['test', 'efa'].forEach(k => {
+    const previas = previo[k], nuevas = nuevo[k];
+    if (!previas || !previas.length) return;
+    if (!nuevas) {
+      if (retener(k + '|*')) { nuevo[k] = previas; log.log(`respuestas ${k}: no se pudo leer, se mantiene la copia anterior (${previas.length} filas)`); }
+      else log.log(`respuestas ${k}: sigue sin leerse tras ${GUARDA.minMs / 60000} min, se deja de mantener la copia anterior`);
+      return;
+    }
+    if (soltar(k + '|*')) log.log(`respuestas ${k}: se vuelve a leer`);
+    const porRbd = filas => filas.reduce((m, x) => m.set(x.rbd, (m.get(x.rbd) || []).concat([x])), new Map());
+    const a = porRbd(previas), b = porRbd(nuevas);
+    const retenidos = new Set();
+    let aceptados = 0, normales = 0, filas = 0;
+    a.forEach((filasA, rbd) => {
+      const clave = k + '|' + rbd;
+      if ((b.get(rbd) || []).length >= filasA.length) { if (soltar(clave)) normales++; return; }
+      if (retener(clave)) { retenidos.add(rbd); filas += filasA.length - (b.get(rbd) || []).length; } else aceptados++;
+    });
+    Object.keys(sospechas).forEach(c => { if (c.startsWith(k + '|') && c !== k + '|*' && !a.has(c.slice(k.length + 1))) delete sospechas[c]; });
+    if (retenidos.size) {
+      nuevo[k] = nuevas.filter(x => !retenidos.has(x.rbd)).concat(previas.filter(x => retenidos.has(x.rbd)));
+      log.log(`respuestas ${k}: ${retenidos.size} colegios con menos filas (${filas}), se mantienen sus filas anteriores`);
+    }
+    if (aceptados) log.log(`respuestas ${k}: baja aceptada en ${aceptados} colegios tras ${GUARDA.minMs / 60000} min`);
+    if (normales) log.log(`respuestas ${k}: ${normales} colegios volvieron a la normalidad`);
+  });
+  return nuevo;
+}
+
 function crearServicio({ src, planilla, seguimiento = null, seguimientoEfa = null, ahora = () => new Date(), ttlMs = 3 * 60 * 1000, maxEdadMs = 10 * 60 * 1000, frescoMs = 15 * 1000, minEntreMs = 30 * 1000, log = console }) {
   let snap = null;      // { titulos: Set, tablas: {tab: values}, leido }
   let datos = null;     // cargarDatos_() result for the current snapshot (or its error)
   let cargando = null;
+  const sospechas = {}; // per-school response drops being held (protegerRespuestas)
   let ultimoIntento = 0;
   const pendientes = []; // Métricas rows waiting to be written
   let vaciando = false;
@@ -130,7 +177,8 @@ function crearServicio({ src, planilla, seguimiento = null, seguimientoEfa = nul
       const tablas = {};
       Object.keys(raw.seriales).forEach(t => { tablas[t] = comoGetValues(raw.seriales[t], raw.formateados[t]); });
       snap = { titulos: new Set(raw.titulos), tablas, leido: Date.now() };
-      try { datos = { valor: cargarDatosOriginal() }; } catch (error) { datos = { error }; }
+      const previo = datos && !datos.error ? datos.valor : null;
+      try { datos = { valor: protegerRespuestas(cargarDatosOriginal(), previo, sospechas, ahora().getTime(), log) }; } catch (error) { datos = { error }; }
       log.log(`snapshot ${Date.now() - t0} ms`); // timing only
       setImmediate(() => { escribirSeguimiento(); }); // never makes a login wait
     })().finally(() => { cargando = null; });
@@ -213,4 +261,4 @@ function crearServicio({ src, planilla, seguimiento = null, seguimientoEfa = nul
   };
 }
 
-module.exports = { crearServicio, formatDate, serialAFecha, comoGetValues };
+module.exports = { crearServicio, formatDate, serialAFecha, comoGetValues, protegerRespuestas, GUARDA };

@@ -122,6 +122,40 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   for (let i = 0; i < 5; i++) await svc6.manejar('POST', '/', JSON.stringify({ ...casos[0], refresco: true, fresco: true }));
   check('repeated Actualizar clicks: at most one Sheet read per 30 s', lecturas === l0);
 
+  // Guard, per school: a school losing rows keeps its previous ones, the others get the new copy; a lasting drop is accepted
+  let relojG = new Date(2026, 10, 4, 10, 0);
+  const logsG = [];
+  const svcG = crearServicio({ src, planilla, log: { log: m => logsG.push(m), error: m => logsG.push('ERR ' + m) }, ahora: () => relojG, minEntreMs: 0 });
+  const vista = async c => { const r = JSON.parse((await svcG.manejar('POST', '/', JSON.stringify({ ...c, refresco: true }))).cuerpo);
+    return { t: r.programas.reduce((n, p) => n + ((p.test.resumen || {}).r || 0), 0), e: r.programas.reduce((n, p) => n + (p.efa.total || 0), 0), efaOk: r.programas.every(p => p.efa.ok) }; };
+  const refrescarG = async (min = 2) => { relojG = new Date(relojG.getTime() + min * 60000); await svcG.manejar('POST', '/refrescar', ''); };
+  const a0 = await vista(casos[0]), b0 = await vista(casos[1]);
+  const testG = sheets['Respuestas Test'].map(r => r.slice()), efaG = sheets['Respuestas EFA'].map(r => r.slice());
+  const FARO = 'Puerto Inventado - Escuela El Faro - 22222';
+  sheets['Respuestas Test'] = testG.filter(r => r[0] !== 'ASE_4-5').concat([test('ASE_EDI_8-IV', 'Nuevo', 'Alumno', 2, '8° básico', 'A', FARO, 9)]);
+  await refrescarG();
+  check('guard: the school that lost rows keeps its previous count, another school gets its new response', (await vista(casos[0])).t === a0.t && (await vista(casos[1])).t === b0.t + 1
+    && logsG.some(m => /respuestas test: 1 colegios con menos filas .4., se mantienen sus filas anteriores/.test(m)));
+  sheets['Respuestas Test'] = testG.concat([test('ASE_4-5', 'Nueva', 'Respuesta', 21, '4° básico', 'A', AROMOS, 4), test('ASE_EDI_8-IV', 'Nuevo', 'Alumno', 2, '8° básico', 'A', FARO, 9)]);
+  await refrescarG();
+  check('guard: back to normal on the next read, its new responses show', (await vista(casos[0])).t === a0.t + 1 && logsG.some(m => /respuestas test: 1 colegios volvieron a la normalidad/.test(m)));
+  sheets['Respuestas Test'] = testG.map(r => r.slice());
+  faltan = ['Respuestas EFA'];
+  await refrescarG();
+  const vE = await vista(casos[0]);
+  check('guard: Respuestas EFA unreadable after a good read → previous EFA kept (no error shown)', vE.efaOk === true && vE.e === a0.e && logsG.some(m => /respuestas efa: no se pudo leer, se mantiene la copia anterior/.test(m)));
+  faltan = [];
+  sheets['Respuestas EFA'] = efaG.filter(r => r[0] !== 'REL Consolidado');
+  await refrescarG(); await refrescarG(); await refrescarG();
+  check('guard: 3 reads but under 30 min → still held for that school', (await vista(casos[0])).e === a0.e);
+  await refrescarG(30);
+  check('guard: drop still there after 30 min and 3+ reads → accepted for that school (e.g. test responses deleted)', (await vista(casos[0])).e === a0.e - 1 && logsG.some(m => /respuestas efa: baja aceptada en 1 colegios/.test(m)));
+  check('guard log carries counts only, never names, emails or RBDs', !logsG.some(m => /Fuentes|Mella|Martina|ejemplo.cl|11111|22222/.test(m)));
+  check('guard: nothing held once every school is back', (() => { const p = require('../cloudrun/app').protegerRespuestas; const s = {};
+    const prev = { test: [{ rbd: '1' }, { rbd: '1' }], efa: null }, out = p({ test: [{ rbd: '1' }, { rbd: '1' }, { rbd: '2' }], efa: null }, prev, s, 0, silencio);
+    return out.test.length === 3 && !Object.keys(s).length; })());
+  sheets['Respuestas Test'] = testG; sheets['Respuestas EFA'] = efaG;
+
   // Team tracker: same rows as Code.js on the Apps Script harness, Correos Test read without its emails
   check('tracker off by default: Métricas and Correos Test not read', !pedidas.includes('Métricas') && !pedidas.includes('Correos Test'));
   sheets['Correos Test'] = [['RBD', 'Colegio', 'Para', 'CC', 'Enviar', 'Enviado'],
