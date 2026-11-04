@@ -39,6 +39,7 @@ Grade suffixes: `NT1, NT2, 1º, 2º, 3º, 4º, 5º, 6º, 7º, 8º, I, II, III, I
 | `contacto_general` | `evaluacion@fundaciontrabun.cl` |
 | `contacto_edi` | `consultas_edi@fundaciontrabun.cl` |
 | `aviso_portal` | optional text shown to every school at the top of the panel (plain text, line breaks kept); blank or missing = no notice. Cloud Run picks a change up with the next snapshot (~2 min) |
+| `monitor_correo` | optional, comma-separated: who gets the `Monitor` alerts; blank = the owner of the `revisarConteos` trigger |
 
 ### `Formularios` (one row per form)
 | Encuesta | Form | Programa | EDI | Año inicio | Modelo | Desde | Hasta | Link |
@@ -142,6 +143,9 @@ Its own Google Sheet (not a tab of `Seguimiento interno`), shared with the team 
   - Role `resp.`: above `esp.` ("N sobre lo esperado (esperado: E).") · responses with no SF contact for the role. `Encargado/a esp.` = 0: "Sin Encargado/a en Salesforce." `Docentes resp.` (ASE): "Docentes: D. En los niveles suman S: …" (several grades; no grade).
   - `Contactos SF`: no contacts · same email repeated with the same role / once without a role / with different roles («…» y «…») · contacts without a role · same email in another school (RBD …). Each says to fix it in Salesforce.
   - Grade `cursos`: `Fuera de lo registrado` (N docentes declared it) · no CxN in SF.
+
+### `Monitor` (written by `revisarConteos()`, Apps Script time trigger every minute; 04-11-2026)
+Counts only, never names. Rows 1–2: last check time + recipients, how it works. From row 4: `Encuesta | Form | Respuestas ahora | Referencia | Estado`, one row per Form of `Respuestas Test` and `Respuestas EFA` (a row with a Form = one response; both imports already drop rows without a school), a `(pestaña)` row per tab (a `REVISAR` row or a formula error shown in A2) and a `Total`. `Referencia` = highest count confirmed. A Form below its reference, or a tab problem, on **5 checks in a row** (about 5 minutes; shorter blips are IMPORTRANGE reloading, and Cloud Run holds the previous copy meanwhile) sends one email (`[Portal] Bajaron las respuestas: …`, before → after); one more when it recovers. Columns G–K: the last 60 events, newest first. State in script properties (`monitor_estado`, `monitor_historial`), so editing the tab changes nothing. `reiniciarMonitor()` (manual) accepts the current counts, e.g. after deleting test responses. The trigger is created by hand in the editor (Activadores → `revisarConteos` → basado en tiempo → cada minuto) by whoever should send the emails; Cloud Run never reads this tab.
 
 ### `Precalculo` (not built yet; see §3 Volume)
 `rbd | json | actualizado`.

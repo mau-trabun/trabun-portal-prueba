@@ -2195,3 +2195,127 @@ function escribirPestana_(sh, headers, rows) {
     if (v instanceof Date) sh.getRange(i + 2, j + 1).setNumberFormat('dd-mm-yyyy');
   }));
 }
+
+// ── Response monitor (time trigger, every minute; Apps Script only) ──
+// revisarConteos() counts rows per Form in Respuestas Test and Respuestas EFA (both imports already drop rows without a
+// school, so a row with a Form is a response), shows
+// them in the Monitor tab and emails when a Form stays below its reference for MONITOR.confirmar checks in a row (5 = about
+// 5 minutes; shorter blips are IMPORTRANGE reloading, and Cloud Run holds the previous copy meanwhile): one
+// email per drop, another when it recovers. A "REVISAR" row or a tab whose formula shows an error counts as a drop too.
+// Reference = highest count confirmed; reiniciarMonitor() accepts the current counts (e.g. after deleting test
+// responses). Counts only, never names. Recipients: Config "monitor_correo" (comma-separated) or else the trigger's
+// owner. State in script properties. The trigger is created by hand (Activadores → revisarConteos, cada minuto).
+const MONITOR = { tab: 'Monitor', estado: 'monitor_estado', historial: 'monitor_historial', confirmar: 5, maxHistorial: 60,
+  encuestas: [{ id: 'test', tab: TABS.respTest, nombre: 'Test de Estudiantes' }, { id: 'efa', tab: TABS.respEfa, nombre: 'EFA' }] };
+const MONITOR_PESTANA = '(pestaña)';
+
+function revisarConteos() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(0)) return 'Otra revisión en curso';
+  try { return revisarConteos_(new Date(), false); } finally { lock.releaseLock(); }
+}
+
+function reiniciarMonitor() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try { return revisarConteos_(new Date(), true); } finally { lock.releaseLock(); }
+}
+
+// Reads only the first columns: Form and the third one, where a REVISAR row writes its message.
+function contarRespuestas_(name) {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (!sh) return { error: 'falta la pestaña' };
+  const filas = sh.getLastRow(), ancho = sh.getLastColumn();
+  if (filas < 1) return { error: 'la pestaña está vacía' };
+  const enc = sh.getRange(1, 1, 1, ancho).getDisplayValues()[0].map(h => normTexto_(h));
+  const cForm = enc.indexOf('form');
+  if (cForm < 0) return { error: 'no encontré la columna Form' };
+  const v = filas > 1 ? sh.getRange(2, 1, filas - 1, Math.max(cForm, 2) + 1).getDisplayValues() : [];
+  const primera = v.length ? String(v[0][0]).trim() : '';
+  if (/^#|^(cargando|loading)/i.test(primera)) return { error: `la fórmula muestra «${primera.slice(0, 80)}»` };
+  const porForm = {}, revisar = [];
+  v.forEach(r => {
+    const aviso = r.map(x => String(x).trim()).find(x => /^REVISAR/i.test(x));
+    if (aviso) { if (revisar.indexOf(aviso) < 0) revisar.push(aviso); return; }
+    const form = String(r[cForm]).trim();
+    if (form) porForm[form] = (porForm[form] || 0) + 1;
+  });
+  return { porForm, revisar };
+}
+
+function revisarConteos_(ahora, reiniciar) {
+  const props = PropertiesService.getScriptProperties();
+  const st = JSON.parse(props.getProperty(MONITOR.estado) || '{}');
+  st.base = st.base || {}; st.bajo = st.bajo || {}; st.alerta = st.alerta || {};
+  let hist = JSON.parse(props.getProperty(MONITOR.historial) || '[]');
+  const hora = Utilities.formatDate(ahora, TZ, 'dd-MM-yyyy HH:mm:ss');
+  const miles = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const nuevas = [], recuperadas = [], filas = [];
+
+  // One key per survey × Form, plus one per survey for the whole tab (REVISAR row or formula error)
+  const evaluar = (enc, form, baja, detalle, actual) => {
+    const k = enc.id + '|' + form;
+    if (reiniciar || !baja) {
+      if (st.alerta[k] && !reiniciar) recuperadas.push({ enc, form, detalle });
+      delete st.bajo[k]; delete st.alerta[k];
+      return 'OK';
+    }
+    st.bajo[k] = (st.bajo[k] || 0) + 1;
+    if (st.bajo[k] >= MONITOR.confirmar && !st.alerta[k]) { st.alerta[k] = hora; nuevas.push({ enc, form, detalle, actual }); }
+    return st.alerta[k] ? `Bajó · aviso enviado ${st.alerta[k]}` : `Bajó · ${st.bajo[k]} de ${MONITOR.confirmar} revisiones antes de avisar`;
+  };
+
+  MONITOR.encuestas.forEach(enc => {
+    const c = contarRespuestas_(enc.tab);
+    const problema = c.error || (c.revisar.length ? c.revisar.join(' | ') : '');
+    filas.push([enc.nombre, MONITOR_PESTANA, '', '', evaluar(enc, MONITOR_PESTANA, !!problema, problema || 'se lee bien') +
+      (problema ? ` · ${problema}` : '')]);
+    if (c.error) return; // unreadable tab: keep each Form's state as it was
+    const forms = Array.from(new Set(Object.keys(c.porForm).concat(Object.keys(st.base)
+      .filter(k => k.startsWith(enc.id + '|') && !k.endsWith('|' + MONITOR_PESTANA)).map(k => k.slice(enc.id.length + 1))))).sort();
+    let total = 0;
+    forms.forEach(form => {
+      const k = enc.id + '|' + form, n = c.porForm[form] || 0, b = st.base[k];
+      total += n;
+      const baja = b != null && n < b;
+      const estado = evaluar(enc, form, baja, `${miles(b)} → ${miles(n)} (−${miles((b || 0) - n)})`, n);
+      if (!baja || reiniciar) st.base[k] = n;
+      filas.push([enc.nombre, form, n, st.base[k], estado]);
+    });
+    filas.push([enc.nombre, 'Total', total, '', '']);
+  });
+
+  if (reiniciar) hist.unshift([hora, '', '', 'Referencias reiniciadas con los números actuales', '']);
+  nuevas.forEach(a => hist.unshift([hora, a.enc.nombre, a.form, a.detalle, 'Aviso de baja']));
+  recuperadas.forEach(a => hist.unshift([hora, a.enc.nombre, a.form, '', 'Se recuperó']));
+  hist = hist.slice(0, MONITOR.maxHistorial);
+  props.setProperty(MONITOR.estado, JSON.stringify(st));
+  props.setProperty(MONITOR.historial, JSON.stringify(hist));
+
+  const para = String(leerConfig_().monitor_correo || '').split(/[\s,;]+/).filter(x => RE_CORREO.test(x)).join(',') ||
+    Session.getEffectiveUser().getEmail();
+  if ((nuevas.length || recuperadas.length) && para) {
+    const linea = a => `· ${a.enc.nombre} · ${a.form === MONITOR_PESTANA ? a.enc.tab : a.form}: ${a.detalle}`;
+    const partes = ['Hola,', ''];
+    if (nuevas.length) partes.push(`En la revisión de las ${hora} bajó el número de respuestas y siguió bajo durante ${MONITOR.confirmar} revisiones seguidas:`, '',
+      ...nuevas.map(linea), '', `Revisa las pestañas ${TABS.respTest} / ${TABS.respEfa} y los compilados de SurveyMonkey. ` +
+      'Si la baja es esperada (por ejemplo, borraste respuestas de prueba), ejecuta reiniciarMonitor() en el editor de Apps Script ' +
+      'para aceptar los números actuales. Te escribo de nuevo cuando se recupere.', '');
+    if (recuperadas.length) partes.push(`Se recuperaron (revisión de las ${hora}):`, '',
+      ...recuperadas.map(a => `· ${a.enc.nombre} · ${a.form === MONITOR_PESTANA ? a.enc.tab : a.form}`), '');
+    const que = nuevas.length ? 'Bajaron las respuestas: ' + nuevas.map(a => a.form === MONITOR_PESTANA ? a.enc.tab : a.form).join(', ')
+      : 'Se recuperaron las respuestas: ' + recuperadas.map(a => a.form === MONITOR_PESTANA ? a.enc.tab : a.form).join(', ');
+    MailApp.sendEmail({ to: para, subject: `[Portal] ${que}`, body: partes.join('\n'), name: 'Monitor del Portal' });
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(MONITOR.tab) || ss.insertSheet(MONITOR.tab, ss.getNumSheets());
+  sh.clearContents();
+  sh.getRange(1, 1, 2, 1).setValues([[`Última revisión: ${hora} · avisa a: ${para || '(nadie)'}`],
+    [`Una baja se avisa por correo si sigue ${MONITOR.confirmar} revisiones seguidas. Para aceptar números más bajos (p. ej. tras borrar respuestas de prueba), ejecuta reiniciarMonitor().`]]);
+  sh.getRange(4, 1, 1, 5).setValues([['Encuesta', 'Form', 'Respuestas ahora', 'Referencia', 'Estado']]).setFontWeight('bold');
+  if (filas.length) sh.getRange(5, 1, filas.length, 5).setValues(filas);
+  sh.getRange(4, 7, 1, 5).setValues([['Fecha', 'Encuesta', 'Form', 'Cambio', 'Aviso']]).setFontWeight('bold');
+  if (hist.length) sh.getRange(5, 7, hist.length, 5).setValues(hist);
+  return `${hora}: ${nuevas.length} bajas nuevas, ${recuperadas.length} recuperadas`;
+}
