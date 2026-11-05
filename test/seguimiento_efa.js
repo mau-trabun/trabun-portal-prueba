@@ -159,7 +159,7 @@ const bloques = t => {
 };
 const cuadra = (g, filas) => g.Implementaciones === filas.length && g['Impl. con al menos 1 respuesta'] === filas.filter(x => x.Respuestas > 0).length
   && g.Respuestas === sumaR(filas, 'Respuestas')
-  && ROLES.every(r => g['% Avance ' + r] === (sumaR(filas, r + ' esp.') ? Math.round(sumaR(filas, r + ' resp.') / sumaR(filas, r + ' esp.') * 1000) / 1000 : ''));
+  && ROLES.every(r => g['% Avance ' + r] === (sumaR(filas, r + ' esp.') ? Math.min(1, Math.round(sumaR(filas, r + ' resp.') / sumaR(filas, r + ' esp.') * 1000) / 1000) : ''));
 const TJ = out.tabs['Por JdP'], TP = out.tabs['Por programa'], BJ = bloques(TJ), BP = bloques(TP);
 check('Por JdP laid out like 2025: status lines, title in B3, blank row, one table from column B (JdP rows + Total), footnote',
   /^Actualizado: /.test(TJ[0][0]) && TJ[2][0] === '' && TJ[2][1] === 'Resumen de respuestas por Jefe/a de Proyecto · EFA 2026' && !TJ[3].length
@@ -208,10 +208,29 @@ check('EFA-EDI consents: one row per cohort + Total EFA-EDI when there are two c
 check('summary tabs: free layout, % columns (F–J) as percent; no bands', ['Por JdP', 'Por programa'].every(n => out.formato[n].libre === true
   && out.formato[n].pct.join() === '5,6,7,8,9' && out.formato[n].patron === '0.00%' && !out.formato[n].gris && out.formato['Resumen'].patron === '0.00%' && out.tabs[n].every(r => r.slice(5, 10).every(v => v === '' || typeof v === 'number' || /^% /.test(v)))));
 check('summary tabs: no-role count only as a note on Respuestas of the rows that have it (Total included)', (() => {
-  const n = out.notas['Por JdP'];
+  const n = out.notas['Por JdP'].filter(([, c]) => c === 4);
   return !TJ.some(r => r.some(v => /sin rol/i.test(v))) && n.length >= 1 && n.every(([r, c, x]) => c === 4 && TJ[r][4] >= 1
     && /^\\d+ respuestas? sin rol: cuentan? en Respuestas totales, pero no en la desagregación por rol\\.$/.test(x))
-    && n.some(([r]) => TJ[r][1] === 'Total') && out.notas['Por programa'].every(([r, c]) => c === 4 && typeof TP[r][4] === 'number');
+    && n.some(([r]) => TJ[r][1] === 'Total') && out.notas['Por programa'].filter(([, c]) => c < 5).every(([r, c]) => c === 4 && typeof TP[r][4] === 'number');
+})());
+check('summary %: capped at 100%; Por JdP notes the real % and why; Por programa notes the real %, how many schools and JdPs, and where to look', (() => {
+  const f = BJ[0].filas, tot = f[f.length - 1];
+  const capped = ROLES.filter(r => sumaR(filasR, r + ' resp.') > sumaR(filasR, r + ' esp.') && sumaR(filasR, r + ' esp.') > 0);
+  const notaEn = (fila, r) => (out.notas['Por JdP'].find(([x, c]) => x === fila && c === 5 + ROLES.indexOf(r)) || [])[2];
+  const sobre = r => filasR.filter(x => x[r + ' resp.'] > (x[r + ' esp.'] || 0)).length;
+  return capped.length >= 1 && capped.every(r => tot['% Avance ' + r] === 1
+      && notaEn(tot._fila, r) === 'Se muestra 100%, pero el cálculo da ' + String(Math.round(sumaR(filasR, r + ' resp.') / sumaR(filasR, r + ' esp.') * 10000) / 100).replace('.', ',')
+        + '% (' + sumaR(filasR, r + ' resp.') + ' respuestas de ' + r + ' sobre ' + sumaR(filasR, r + ' esp.') + ' esperados): en ' + sobre(r) + (sobre(r) === 1 ? ' colegio hay' : ' colegios hay')
+        + ' más respuestas que contactos de Salesforce con ese rol.')
+    && ROLES.filter(r => capped.indexOf(r) < 0).every(r => !notaEn(tot._fila, r))
+    && BP.every(b => b.filas.every(g => ROLES.every(r => g['% Avance ' + r] === undefined || g['% Avance ' + r] === '' || g['% Avance ' + r] <= 1)))
+    && capped.every(r => {
+      const totP = BP[0].filas[BP[0].filas.length - 1], jd = new Set(filasR.filter(x => x[r + ' resp.'] > (x[r + ' esp.'] || 0)).map(x => x['Jefe/a de Proyecto'])).size;
+      const n = (out.notas['Por programa'].find(([x, c]) => x === totP._fila && c === 5 + ROLES.indexOf(r)) || [])[2];
+      return totP['% Avance ' + r] === 1 && n === 'Se muestra 100%, pero el cálculo da ' + String(Math.round(sumaR(filasR, r + ' resp.') / sumaR(filasR, r + ' esp.') * 10000) / 100).replace('.', ',')
+        + '%. Hay ' + sobre(r) + (sobre(r) === 1 ? ' colegio' : ' colegios') + ' con más respuestas que contactos de Salesforce con ese rol (de ' + jd
+        + (jd === 1 ? ' Jefe/a de Proyecto' : ' Jefes/as de Proyecto') + '); el detalle está en Resumen.';
+    });
 })());
 check('summary tabs without Contactos EFA: % blank, counts kept', (() => {
   const t = sinContactos.tabs['Por JdP'], f = bloques(t)[0].filas, tot = f[f.length - 1];

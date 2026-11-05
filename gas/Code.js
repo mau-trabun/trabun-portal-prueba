@@ -1086,11 +1086,22 @@ function seguimientoEfa_(d, s, reloj) {
   // tables from column B, a block per table, Total row, footnote); the team does the colors. Sums of Resumen rows;
   // % = group responses ÷ group expected (not an average of schools).
   const hayE = !!s.contactos;
+  // % capped at 100% (Mau 05-11-2026); topes = the roles where the real % is higher, for Por JdP's notes
+  const topes = grupo => SEG_ROLES_EFA.map(([k, nombre]) => {
+    const rr = grupo.reduce((t, f) => t + f.r[k], 0), ee = grupo.reduce((t, f) => t + (typeof f.e[k] === 'number' ? f.e[k] : 0), 0);
+    const sobreF = grupo.filter(f => f.r[k] > (typeof f.e[k] === 'number' ? f.e[k] : 0)); // schools above what SF expects
+    const jdps = new Set(sobreF.map(f => f.sp.jefeProyecto || '')).size;
+    return { nombre, rr, ee, sobre: sobreF.length, jdps, tope: hayE && ee > 0 && rr > ee };
+  });
   const sumar = grupo => [grupo.length, grupo.filter(f => f.vig.length).length, grupo.reduce((t, f) => t + f.vig.length, 0)]
-    .concat(SEG_ROLES_EFA.map(([k]) => {
-      const rr = grupo.reduce((t, f) => t + f.r[k], 0), ee = grupo.reduce((t, f) => t + (typeof f.e[k] === 'number' ? f.e[k] : 0), 0);
-      return hayE ? pct(rr, ee) : '';
-    }));
+    .concat(topes(grupo).map(x => (hayE ? (x.tope ? 1 : pct(x.rr, x.ee)) : '')));
+  const real = x => String(Math.round(x.rr / x.ee * 10000) / 100).replace('.', ',') + '%';
+  const textoTope = x => `Se muestra 100%, pero el cálculo da ${real(x)} `
+    + `(${pl(x.rr, 'respuesta', 'respuestas')} de ${x.nombre} sobre ${pl(x.ee, 'esperado', 'esperados')}): `
+    + `en ${pl(x.sobre, 'colegio hay', 'colegios hay')} más respuestas que contactos de Salesforce con ese rol.`;
+  // Por programa: where to look, never whose it is (Mau 05-11-2026)
+  const textoTopeP = x => `Se muestra 100%, pero el cálculo da ${real(x)}. Hay ${pl(x.sobre, 'colegio', 'colegios')} con más respuestas `
+    + `que contactos de Salesforce con ese rol (de ${pl(x.jdps, 'Jefe/a de Proyecto', 'Jefes/as de Proyecto')}); el detalle está en Resumen.`;
   const anio = reloj.hoy.slice(0, 4);
   const PIE = '*% = respuestas del grupo ÷ contactos esperados en Salesforce, sumando todo el grupo (no es el promedio de los colegios). Una respuesta cuenta en cada rol que declara.';
   const cResp = 1 + SEG_EFA_SUMA.length; // 0-based column of Respuestas (col A blank, B label)
@@ -1103,6 +1114,7 @@ function seguimientoEfa_(d, s, reloj) {
       b.filas.forEach(g => {
         const sr = g.filas.reduce((n, f) => n + f.sinRol, 0);
         if (sr && !b.valores) notasR.push([t.length, cResp, sinRolTexto(sr)]);
+        if (!b.valores) topes(g.filas).forEach((x, j) => { if (x.tope) notasR.push([t.length, cResp + 1 + j, nombre === SEG_EFA_JDP ? textoTope(x) : textoTopeP(x)]); });
         t.push(['', g.nombre].concat((b.valores || sumar)(g.filas)));
       });
     });
