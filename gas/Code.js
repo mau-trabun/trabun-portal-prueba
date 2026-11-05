@@ -858,6 +858,7 @@ const TAB_CONTACTOS_EFA = 'Contactos EFA';
 const COLS_CONTACTOS_EFA = ['Nombre para formulario', 'Implementación: Record Type', 'Rol en la Implementacióon', 'Rol en la Implementación', 'Email'];
 const SEG_ACCIONES_EFA = { efa_copiar_link: 'link', efa_copiar_mensaje: 'mensaje', efa_whatsapp: 'WhatsApp', efa_qr: 'QR' };
 // Tracker roles (as in the 2025 EFA tracker). A response or a contact counts in every role it holds.
+const SEG_ESPERADO_MINIMO = ['director', 'encargado']; // roles every school has: expected 1 when SF has none
 const SEG_ROLES_EFA = [['director', 'Director/a'], ['encargado', 'Encargado/a'], ['mentor', 'Mentor/a'], ['otros', 'Otros líderes'], ['docente', 'Docentes']];
 const ROLES_SEG_EFA = { // ROLES_EFA short label → tracker roles; an unknown option → Otros líderes, no role → none
   'Director/a': ['director'], 'Equipo Directivo / Convivencia Escolar': ['otros'], 'Encargado/a': ['encargado'], 'Mentor/a': ['mentor'],
@@ -991,6 +992,9 @@ function seguimientoEfa_(d, s, reloj) {
     vig.forEach(x => rolesDe(x).forEach(k => { r[k]++; }));
     const lista = contactos ? contactos[f.rbd + '|' + p.programa] || [] : null;
     if (lista) SEG_ROLES_EFA.forEach(([k]) => { e[k] = lista.filter(x => x.roles.indexOf(k) >= 0).length; });
+    // Every school has a Director/a and an Encargado/a (Mau 05-11-2026): when SF has none, expect 1 (SF rules otherwise)
+    const automatico = {};
+    if (lista) SEG_ESPERADO_MINIMO.forEach(k => { if (!e[k]) { e[k] = 1; automatico[k] = true; } });
     const sinRol = vig.filter(x => !rolSeg(x)).length;
     Object.assign(f, { r, e, sinRol, nContactos: lista ? lista.length : '' }); // for Por JdP / Por programa
 
@@ -1018,7 +1022,7 @@ function seguimientoEfa_(d, s, reloj) {
       const cR = cRol + 3 * j;
       if (lista && e[k] && r[k] > e[k]) nota(fila, cR, [`${miles(r[k] - e[k])} sobre lo esperado (esperado: ${miles(e[k])}).`]);
       else if (lista && !e[k] && r[k]) nota(fila, cR, [`Sin contactos con este rol en Salesforce, pero hay ${pl(r[k], 'respuesta', 'respuestas')}.`]);
-      if (lista && k === 'encargado' && !e[k]) nota(fila, cR + 1, ['Sin Encargado/a en Salesforce.']);
+      if (automatico[k]) nota(fila, cR + 1, [`Esperado automático: Salesforce no tiene ${nombre} vigente para esta implementación, así que se asume 1. Para que este comentario desaparezca, actualiza el contacto en SF.`]);
     });
 
     // Contactos SF: cases that look like a Salesforce mistake, to fix there

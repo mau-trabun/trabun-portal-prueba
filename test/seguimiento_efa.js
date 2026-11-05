@@ -88,8 +88,17 @@ check('no role: no column; counted in Respuestas, in no role, only its count in 
   && /^1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol\\.$/m.test(nota(22222, 'ASE', 'Respuestas')) && !/sin rol/.test(nota(11111, 'REL', 'Respuestas') || ''));
 check('expected = SF contacts per role, as SF has them (repeats and no-email contacts count; multi-role in each role)',
   a['Contactos SF'] === 9 && a['Director/a esp.'] === 1 && a['Encargado/a esp.'] === 2 && a['Mentor/a esp.'] === 1 && a['Otros líderes esp.'] === 1 && a['Docentes esp.'] === 4
-  && rl['Contactos SF'] === 5 && rl['Docentes esp.'] === 2 && rl['Mentor/a esp.'] === 1 && rl['Otros líderes esp.'] === 1 && f['Contactos SF'] === 2 && f['Encargado/a esp.'] === 0);
-check('% = resp. / esp., blank without contacts for the role', a['Docentes %'] === 0.75 && a['Director/a %'] === 1 && f['Encargado/a %'] === '' && rl['Encargado/a %'] === 2);
+  && rl['Contactos SF'] === 5 && rl['Docentes esp.'] === 2 && rl['Mentor/a esp.'] === 1 && rl['Otros líderes esp.'] === 1 && f['Contactos SF'] === 2 && f['Mentor/a esp.'] === 0);
+check('% = resp. / esp., blank without contacts for the role', a['Docentes %'] === 0.75 && a['Director/a %'] === 1 && f['Mentor/a %'] === '' && rl['Encargado/a %'] === 2);
+check('no Director/a or Encargado/a in SF: expected 1 (automatic, with a note); SF rules when it has any; other roles stay 0; never without the contacts tab', (() => {
+  const auto = c => /^Esperado automático: Salesforce no tiene .* vigente para esta implementación, así que se asume 1\\./.test(nota(...c) || '');
+  const x = fila('11111', 'ASE', sinContactos.tabs['Resumen']);
+  return f['Director/a esp.'] === 1 && f['Encargado/a esp.'] === 1 && f['Encargado/a %'] === 0 && rl['Director/a esp.'] === 1
+    && auto([22222, 'ASE', 'Director/a esp.']) && auto([22222, 'ASE', 'Encargado/a esp.']) && auto([11111, 'REL', 'Director/a esp.'])
+    && /no tiene Encargado\\/a vigente/.test(nota(22222, 'ASE', 'Encargado/a esp.'))
+    && a['Director/a esp.'] === 1 && !nota(11111, 'ASE', 'Director/a esp.') && a['Encargado/a esp.'] === 2 && !nota(11111, 'ASE', 'Encargado/a esp.')
+    && !nota(22222, 'ASE', 'Mentor/a esp.') && x['Director/a esp.'] === '' && x['Encargado/a esp.'] === '';
+})());
 check('no Contactos EFA tab: Contactos SF, esp. and % blank, header note says why', (() => {
   const x = fila('11111', 'ASE', sinContactos.tabs['Resumen']), hd = sinContactos.tabs['Resumen'][2];
   return x['Contactos SF'] === '' && x['Docentes esp.'] === '' && x['Docentes %'] === '' && x['Docentes resp.'] === 3
@@ -118,7 +127,7 @@ check('note on Docentes resp.: several grades and no grade; merged with another 
   && nota(22222, 'ASE', 'Docentes resp.') === '1 sobre lo esperado (esperado: 1).\\nDocentes: 2. En los niveles suman 3: 1 declaró más de un nivel y cuenta en cada uno.'); // two notes on one cell: merged
 check('notes per role: above what SF has; no SF contact with the role; no Encargado/a in SF',
   nota(11111, 'REL', 'Encargado/a resp.') === '1 sobre lo esperado (esperado: 1).' && nota(22222, 'ASE', 'Docentes resp.') !== undefined
-  && nota(11111, 'REL', 'Docentes resp.') === '1 sobre lo esperado (esperado: 2).' && nota(22222, 'ASE', 'Encargado/a esp.') === 'Sin Encargado/a en Salesforce.'
+  && nota(11111, 'REL', 'Docentes resp.') === '1 sobre lo esperado (esperado: 2).'
   && !nota(11111, 'ASE', 'Docentes resp.').includes('sobre lo esperado'));
 check('notes on Contactos SF: repeated email (same role / one without role / two roles), no role, also in another school',
   nota(11111, 'ASE', 'Contactos SF') === '1 correo aparece más de una vez con el mismo rol: cuenta cada vez. Si es la misma persona, corrígelo en Salesforce.\\n'
