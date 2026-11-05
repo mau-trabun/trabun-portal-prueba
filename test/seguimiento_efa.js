@@ -71,7 +71,7 @@ const notaEnc = c => (out.notas['Resumen'].find(([r, j]) => r === 2 && h[j] === 
 
 check('one tab, status lines, contract header: base, 5 roles × resp./esp./%, Niveles sin docentes, grade pairs in canonical order',
   Object.keys(out.tabs).join() === 'Resumen,Por JdP,Por programa' && T[0][0] === 'Actualizado: 03-11-2026 14:32' && /^Actualización automática cada 2 minutos/.test(T[1][0])
-  && h.slice(0, 13).join('|') === 'RBD|Colegio|Programa|Modelo|EDI|Jefe/a de Proyecto|Coordinador/a|Correo enviado|Ingresos desde la apertura|Último ingreso|Compartió la EFA|Contactos SF|Respuestas'
+  && h.slice(0, 13).join('|') === 'RBD|Colegio|Programa|Modelo|EDI|Jefe/a de Proyecto|Coordinador/a|Correo enviado|Ingresos desde la apertura|Último ingreso|Compartió la EFA|Contactos en SF (sin ajustes)|Respuestas'
   && h.slice(13, 28).join('|') === 'Director/a resp.|Director/a esp.|Director/a %|Encargado/a resp.|Encargado/a esp.|Encargado/a %|Mentor/a resp.|Mentor/a esp.|Mentor/a %|Otros líderes resp.|Otros líderes esp.|Otros líderes %|Docentes resp.|Docentes esp.|Docentes %'
   && h[28] === 'Niveles sin docentes' && h[29] === '1° básico doc.' && h[30] === '1° básico cursos' && h[h.length - 1] === 'IV° medio cursos' && h.length === 29 + 2 * 12);
 check('rows: school-programs with an EFA link or responses; Control left out', T.length === 6 && !!a && !!rl && !!f && !fila('33333', 'ASE'));
@@ -87,8 +87,8 @@ check('responses by role: each counts in every role it declares ("todos" in 3, "
 check('no role: no column; counted in Respuestas, in no role, only its count in the Respuestas note', !h.some(k => /sin rol/i.test(k)) && f['Respuestas'] === 1 + 1 + 2
   && /^1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol\\.$/m.test(nota(22222, 'ASE', 'Respuestas')) && !/sin rol/.test(nota(11111, 'REL', 'Respuestas') || ''));
 check('expected = SF contacts per role, as SF has them (repeats and no-email contacts count; multi-role in each role)',
-  a['Contactos SF'] === 9 && a['Director/a esp.'] === 1 && a['Encargado/a esp.'] === 2 && a['Mentor/a esp.'] === 1 && a['Otros líderes esp.'] === 1 && a['Docentes esp.'] === 4
-  && rl['Contactos SF'] === 5 && rl['Docentes esp.'] === 2 && rl['Mentor/a esp.'] === 1 && rl['Otros líderes esp.'] === 1 && f['Contactos SF'] === 2 && f['Mentor/a esp.'] === 0);
+  a['Contactos en SF (sin ajustes)'] === 9 && a['Director/a esp.'] === 1 && a['Encargado/a esp.'] === 2 && a['Mentor/a esp.'] === 1 && a['Otros líderes esp.'] === 1 && a['Docentes esp.'] === 4
+  && rl['Contactos en SF (sin ajustes)'] === 5 && rl['Docentes esp.'] === 2 && rl['Mentor/a esp.'] === 1 && rl['Otros líderes esp.'] === 1 && f['Contactos en SF (sin ajustes)'] === 2 && f['Mentor/a esp.'] === 0);
 check('% = resp. / esp., blank without contacts for the role', a['Docentes %'] === 0.75 && a['Director/a %'] === 1 && f['Mentor/a %'] === '' && rl['Encargado/a %'] === 2);
 check('no Director/a or Encargado/a in SF: expected 1 (automatic, with a note); SF rules when it has any; other roles stay 0; never without the contacts tab', (() => {
   const auto = c => /^Esperado automático: Salesforce no tiene .* vigente para esta implementación, así que se asume 1\\./.test(nota(...c) || '');
@@ -111,10 +111,10 @@ check('REL Cuadernillos: Encargado/a and Mentor/a expected 0 over SF (and over t
     && x['Director/a esp.'] === rl['Director/a esp.'] && x['Docentes esp.'] === rl['Docentes esp.'] && x['Otros líderes esp.'] === rl['Otros líderes esp.']
     && y['Encargado/a esp.'] === a['Encargado/a esp.'] && !/no responden EFA/.test(n('ASE', 'Encargado/a esp.') || '');
 })());
-check('no Contactos EFA tab: Contactos SF, esp. and % blank, header note says why', (() => {
+check('no Contactos EFA tab: Contactos en SF (sin ajustes), esp. and % blank, header note says why', (() => {
   const x = fila('11111', 'ASE', sinContactos.tabs['Resumen']), hd = sinContactos.tabs['Resumen'][2];
-  return x['Contactos SF'] === '' && x['Docentes esp.'] === '' && x['Docentes %'] === '' && x['Docentes resp.'] === 3
-    && sinContactos.notas['Resumen'].some(([r, j, t]) => r === 2 && hd[j] === 'Contactos SF' && /^Falta la pestaña Contactos EFA/.test(t));
+  return x['Contactos en SF (sin ajustes)'] === '' && x['Docentes esp.'] === '' && x['Docentes %'] === '' && x['Docentes resp.'] === 3
+    && sinContactos.notas['Resumen'].some(([r, j, t]) => r === 2 && hd[j] === 'Contactos en SF (sin ajustes)' && /^Falta la pestaña Contactos EFA/.test(t));
 })());
 check('Correo enviado from Correos EFA (date only); logins since the EFA opened, internal views excluded; latest login',
   a['Correo enviado'] === '02-11-2026' && f['Correo enviado'] === '' && a['Ingresos desde la apertura'] === 1 && a['Último ingreso'] === '03-11-2026 10:00');
@@ -124,8 +124,8 @@ check('ASE docentes by grade: count per declared grade, CxN as cursos; outside t
   && a['1° básico doc.'] === 0 && f['5° básico doc.'] === 1 && f['6° básico doc.'] === 1 && f['4° básico doc.'] === 1 && f['1° básico doc.'] === ''
   && rl['5° básico doc.'] === '' && rl['Niveles sin docentes'] === '');
 check('Niveles sin docentes: implemented grades with no docente (short labels)', a['Niveles sin docentes'] === '1°, 2°, 3°, 4°, 7°, 8°' && f['Niveles sin docentes'] === '7°, 8°, I°, II°, III°, IV°');
-check('header notes: what Contactos SF, Respuestas, roles, Otros líderes and the grade block mean',
-  /^Contactos vigentes en Salesforce/.test(notaEnc('Contactos SF')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos SF'))
+check('header notes: what Contactos en SF (sin ajustes), Respuestas, roles, Otros líderes and the grade block mean',
+  /^Contactos vigentes de la implementación en el reporte de Salesforce .*tal como están\\. No es el total esperado/.test(notaEnc('Contactos en SF (sin ajustes)')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos en SF (sin ajustes)'))
   && /No se muestran: 1 respuesta de un programa Control, 1 respuesta de un RBD que no está en SF \\(pruebas incluidas\\), 1 respuesta de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
   && !out.notas['Resumen'].some(([r, c, t]) => r === 2 && /sin rol/.test(t)) && !notaEnc('Director/a resp.')
   && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico doc.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
@@ -141,10 +141,10 @@ check('notes per role: above what SF has; no SF contact with the role; no Encarg
   nota(11111, 'REL', 'Encargado/a resp.') === '1 sobre lo esperado (esperado: 1).' && nota(22222, 'ASE', 'Docentes resp.') !== undefined
   && nota(11111, 'REL', 'Docentes resp.') === '1 sobre lo esperado (esperado: 2).'
   && !nota(11111, 'ASE', 'Docentes resp.').includes('sobre lo esperado'));
-check('notes on Contactos SF: repeated email (same role / one without role / two roles), no role, also in another school',
-  nota(11111, 'ASE', 'Contactos SF') === '1 correo aparece más de una vez con el mismo rol: cuenta cada vez. Si es la misma persona, corrígelo en Salesforce.\\n'
+check('notes on Contactos en SF (sin ajustes): repeated email (same role / one without role / two roles), no role, also in another school',
+  nota(11111, 'ASE', 'Contactos en SF (sin ajustes)') === '1 correo aparece más de una vez con el mismo rol: cuenta cada vez. Si es la misma persona, corrígelo en Salesforce.\\n'
   + '1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.\\n1 correo también aparece en otro colegio (RBD 22222).'
-  && nota(11111, 'REL', 'Contactos SF') === '1 correo aparece más de una vez, al menos una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.\\n'
+  && nota(11111, 'REL', 'Contactos en SF (sin ajustes)') === '1 correo aparece más de una vez, al menos una sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.\\n'
   + '1 correo tiene roles distintos en filas distintas («Docente y Mentor/a» y «Otro»): cuenta en cada rol. Si no corresponde, corrígelo en Salesforce.\\n1 contacto sin Rol en la Implementación en Salesforce: no cuenta en ningún esperado. Complétalo en Salesforce.');
 check('note on a grade outside the registered ones', nota(11111, 'ASE', 'I° medio cursos') === 'Fuera de lo registrado: SF no tiene este nivel en el programa, pero 1 docente lo declaró.');
 check('gray blocks: Director/a, Mentor/a, Docentes (3 columns each), then every other grade pair',
@@ -261,7 +261,7 @@ check('counts in the notes: one person with three roles is 1 persona; three role
   const o = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj), TT = o.tabs['Resumen'], hh = TT[2];
   const n = c => (o.notas['Resumen'].find(([r, j]) => TT[r][0] === 22222 && TT[r][2] === 'ASE' && hh[j] === c) || [])[2] || '';
   sheets['Respuestas EFA'].length = nR; sheets['Contactos EFA'].length = nC;
-  const R = n('Respuestas'), C = n('Contactos SF');
+  const R = n('Respuestas'), C = n('Contactos en SF (sin ajustes)');
   return / personas: 1 persona respondió más de una vez la encuesta, con un rol distinto cada vez/.test(R)
     && C.includes('1 correo tiene roles distintos en filas distintas («Director/a» y «Mentor/a» y «Otro»): cuenta en cada rol')
     && C.includes('1 correo aparece más de una vez, siempre sin Rol en la Implementación') && !C.includes('mismo rol')

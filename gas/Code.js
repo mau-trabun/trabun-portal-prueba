@@ -858,6 +858,7 @@ const TAB_CONTACTOS_EFA = 'Contactos EFA';
 const COLS_CONTACTOS_EFA = ['Nombre para formulario', 'Implementación: Record Type', 'Rol en la Implementacióon', 'Rol en la Implementación', 'Email'];
 const SEG_ACCIONES_EFA = { efa_copiar_link: 'link', efa_copiar_mensaje: 'mensaje', efa_whatsapp: 'WhatsApp', efa_qr: 'QR' };
 // Tracker roles (as in the 2025 EFA tracker). A response or a contact counts in every role it holds.
+const SEG_COL_CONTACTOS = 'Contactos en SF (sin ajustes)'; // raw SF count, not the expected total (Mau 05-11-2026)
 const SEG_ESPERADO_MINIMO = ['director', 'encargado']; // roles every school has: expected 1 when SF has none
 const SEG_SIN_LIDERES_CUADERNILLOS = ['encargado', 'mentor']; // REL Cuadernillos: expected 0, whatever SF says
 const SEG_ROLES_EFA = [['director', 'Director/a'], ['encargado', 'Encargado/a'], ['mentor', 'Mentor/a'], ['otros', 'Otros líderes'], ['docente', 'Docentes']];
@@ -867,7 +868,7 @@ const ROLES_SEG_EFA = { // ROLES_EFA short label → tracker roles; an unknown o
   'Otro/a líder': ['otros'], 'Docente': ['docente'],
 };
 const SEG_EFA = ['RBD', 'Colegio', 'Programa', 'Modelo', 'EDI', 'Jefe/a de Proyecto', 'Coordinador/a', 'Correo enviado',
-  'Ingresos desde la apertura', 'Último ingreso', 'Compartió la EFA', 'Contactos SF', 'Respuestas'];
+  'Ingresos desde la apertura', 'Último ingreso', 'Compartió la EFA', SEG_COL_CONTACTOS, 'Respuestas'];
 
 function leerContactosEfa_() {
   const t = leerTabla_(TAB_CONTACTOS_EFA);
@@ -970,7 +971,9 @@ function seguimientoEfa_(d, s, reloj) {
     fuera.sf && pl(fuera.sf, 'respuesta de un RBD que no está en SF (pruebas incluidas)', 'respuestas de RBD que no están en SF (pruebas incluidas)'),
     fuera.programa && pl(fuera.programa, 'respuesta de un programa que el colegio no tiene en SF', 'respuestas de programas que el colegio no tiene en SF')].filter(Boolean);
   nota(2, col('Ingresos desde la apertura'), [`Ingresos al portal${abre ? ' desde el ' + ddmm(abre) : ''}, en cualquier pestaña. Las vistas internas no cuentan.`]);
-  nota(2, col('Contactos SF'), [s.contactos ? 'Contactos vigentes en Salesforce (reporte «Contactos EFA \'26 (seguimiento)», actualización diaria). Un contacto con varios roles cuenta en cada uno. Si un número no calza, corrígelo en Salesforce.'
+  nota(2, col(SEG_COL_CONTACTOS), [s.contactos ? 'Contactos vigentes de la implementación en el reporte de Salesforce («Contactos EFA \'26 (seguimiento)», actualización diaria), tal como están. '
+    + 'No es el total esperado: los esperados por rol incluyen ajustes (1 automático en Director/a y Encargado/a, 0 en Encargado/a y Mentor/a de REL Cuadernillos) y un contacto con varios roles cuenta en cada uno. '
+    + 'Si un número no calza, corrígelo en Salesforce.'
     : `Falta la pestaña ${TAB_CONTACTOS_EFA} en la planilla: sin esperados.`,
   sinColegio ? pl(sinColegio, 'contacto no tiene colegio en Salesforce y no se puede asignar.', 'contactos no tienen colegio en Salesforce y no se pueden asignar.') : '']);
   nota(2, col('Respuestas'), ['Respuestas después de quitar envíos repetidos (mismo correo y rol; cuenta el más reciente). Quien responde más de una vez la encuesta, con un rol distinto cada vez, suma una respuesta por envío; una opción con varios roles («Encargado/a y Mentor/a», «Cumplo todos los roles») es una sola respuesta.',
@@ -1044,7 +1047,7 @@ function seguimientoEfa_(d, s, reloj) {
       const otros = [];
       Object.keys(porCorreo).forEach(k => (colegiosDe[k + '|' + p.programa] || []).forEach(o => { if (o !== f.rbd && otros.indexOf(o) < 0) otros.push(o); }));
       const enOtro = Object.keys(porCorreo).filter(k => colegiosDe[k + '|' + p.programa].length > 1).length;
-      nota(fila, col('Contactos SF'), [
+      nota(fila, col(SEG_COL_CONTACTOS), [
         !lista.length ? 'Sin contactos en Salesforce para esta implementación.' : '',
         mismoRol ? `${pl(mismoRol, 'correo aparece', 'correos aparecen')} más de una vez con el mismo rol: ${mismoRol === 1 ? 'cuenta' : 'cuentan'} cada vez. Si es la misma persona, corrígelo en Salesforce.` : '',
         todosSinRol ? `${pl(todosSinRol, 'correo aparece', 'correos aparecen')} más de una vez, siempre sin Rol en la Implementación. Si es la misma persona, corrígelo en Salesforce.` : '',
