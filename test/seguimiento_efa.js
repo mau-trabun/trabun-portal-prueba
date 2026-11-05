@@ -99,6 +99,18 @@ check('no Director/a or Encargado/a in SF: expected 1 (automatic, with a note); 
     && a['Director/a esp.'] === 1 && !nota(11111, 'ASE', 'Director/a esp.') && a['Encargado/a esp.'] === 2 && !nota(11111, 'ASE', 'Encargado/a esp.')
     && !nota(22222, 'ASE', 'Mentor/a esp.') && x['Director/a esp.'] === '' && x['Encargado/a esp.'] === '';
 })());
+check('REL Cuadernillos: Encargado/a and Mentor/a expected 0 over SF (and over the automatic 1), noted; responses there noted; other roles and ASE untouched', (() => {
+  const sf = Object.assign({}, d.sf), c = Object.assign({}, sf['11111']);
+  c.programas = Object.assign({}, c.programas, { rel: Object.assign({}, c.programas.rel, { modelo: 'Cuadernillos' }) });
+  const o = ctx.seguimientoEfa_(Object.assign({}, d, { sf: Object.assign({}, sf, { '11111': c }) }), s, reloj);
+  const t = o.tabs['Resumen'], x = fila('11111', 'REL', t), y = fila('11111', 'ASE', t);
+  const n = (prog, col) => (o.notas['Resumen'].find(([r, j]) => t[r][0] === 11111 && t[r][2] === prog && t[2][j] === col) || [])[2];
+  return x.Modelo === 'Cuadernillos' && x['Encargado/a esp.'] === 0 && x['Mentor/a esp.'] === 0 && x['Encargado/a %'] === '' && x['Mentor/a %'] === ''
+    && n('REL', 'Encargado/a esp.') === 'Encargados y mentores no responden EFA.' && n('REL', 'Mentor/a esp.') === 'Encargados y mentores no responden EFA.'
+    && /^Encargados y mentores no responden EFA, pero hay \\d+ respuestas?\\.$/.test(n('REL', 'Encargado/a resp.') || '') && x['Encargado/a resp.'] > 0
+    && x['Director/a esp.'] === rl['Director/a esp.'] && x['Docentes esp.'] === rl['Docentes esp.'] && x['Otros líderes esp.'] === rl['Otros líderes esp.']
+    && y['Encargado/a esp.'] === a['Encargado/a esp.'] && !/no responden EFA/.test(n('ASE', 'Encargado/a esp.') || '');
+})());
 check('no Contactos EFA tab: Contactos SF, esp. and % blank, header note says why', (() => {
   const x = fila('11111', 'ASE', sinContactos.tabs['Resumen']), hd = sinContactos.tabs['Resumen'][2];
   return x['Contactos SF'] === '' && x['Docentes esp.'] === '' && x['Docentes %'] === '' && x['Docentes resp.'] === 3

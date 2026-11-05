@@ -859,6 +859,7 @@ const COLS_CONTACTOS_EFA = ['Nombre para formulario', 'Implementación: Record T
 const SEG_ACCIONES_EFA = { efa_copiar_link: 'link', efa_copiar_mensaje: 'mensaje', efa_whatsapp: 'WhatsApp', efa_qr: 'QR' };
 // Tracker roles (as in the 2025 EFA tracker). A response or a contact counts in every role it holds.
 const SEG_ESPERADO_MINIMO = ['director', 'encargado']; // roles every school has: expected 1 when SF has none
+const SEG_SIN_LIDERES_CUADERNILLOS = ['encargado', 'mentor']; // REL Cuadernillos: expected 0, whatever SF says
 const SEG_ROLES_EFA = [['director', 'Director/a'], ['encargado', 'Encargado/a'], ['mentor', 'Mentor/a'], ['otros', 'Otros líderes'], ['docente', 'Docentes']];
 const ROLES_SEG_EFA = { // ROLES_EFA short label → tracker roles; an unknown option → Otros líderes, no role → none
   'Director/a': ['director'], 'Equipo Directivo / Convivencia Escolar': ['otros'], 'Encargado/a': ['encargado'], 'Mentor/a': ['mentor'],
@@ -995,6 +996,9 @@ function seguimientoEfa_(d, s, reloj) {
     // Every school has a Director/a and an Encargado/a (Mau 05-11-2026): when SF has none, expect 1 (SF rules otherwise)
     const automatico = {};
     if (lista) SEG_ESPERADO_MINIMO.forEach(k => { if (!e[k]) { e[k] = 1; automatico[k] = true; } });
+    // REL Cuadernillos (the SIP ones get the EFA): encargados and mentores don't answer it (Mau 05-11-2026), expected 0 over SF
+    const sinLideres = {};
+    if (lista && p.programa === 'rel' && normTexto_(sp.modelo) === 'cuadernillos') SEG_SIN_LIDERES_CUADERNILLOS.forEach(k => { e[k] = 0; sinLideres[k] = true; automatico[k] = false; });
     const sinRol = vig.filter(x => !rolSeg(x)).length;
     Object.assign(f, { r, e, sinRol, nContactos: lista ? lista.length : '' }); // for Por JdP / Por programa
 
@@ -1021,7 +1025,9 @@ function seguimientoEfa_(d, s, reloj) {
     SEG_ROLES_EFA.forEach(([k, nombre], j) => {
       const cR = cRol + 3 * j;
       if (lista && e[k] && r[k] > e[k]) nota(fila, cR, [`${miles(r[k] - e[k])} sobre lo esperado (esperado: ${miles(e[k])}).`]);
+      else if (sinLideres[k] && r[k]) nota(fila, cR, [`Encargados y mentores no responden EFA, pero hay ${pl(r[k], 'respuesta', 'respuestas')}.`]);
       else if (lista && !e[k] && r[k]) nota(fila, cR, [`Sin contactos con este rol en Salesforce, pero hay ${pl(r[k], 'respuesta', 'respuestas')}.`]);
+      if (sinLideres[k]) nota(fila, cR + 1, ['Encargados y mentores no responden EFA.']);
       if (automatico[k]) nota(fila, cR + 1, [`Esperado automático: Salesforce no tiene ${nombre} vigente para esta implementación, así que se asume 1. Para que este comentario desaparezca, actualiza el contacto en SF.`]);
     });
 
