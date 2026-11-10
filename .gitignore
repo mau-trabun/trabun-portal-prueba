@@ -3,3 +3,6 @@ data/
 .claude/settings.local.json
 .claude/launch.json
 cloudrun/Code.js
+
+# Seguimiento EFA tracker script: its clasp config stays local (scriptId in memory)
+gas-seguimiento/.clasp.json

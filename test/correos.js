@@ -162,4 +162,5 @@ check('EFA: "the same we sent you" only if every recipient got the Test email (a
   fila11[4] = para; delete sheets['Correos EFA']; ctx.prepararCorreosEfa();
   return cambio.includes('Entren al portal con estos datos:') && !cambio.includes('les enviamos el') && !cambio.includes('el mismo del Test')
     && filaEfa('11111').Mensaje.includes('les enviamos el 9 de octubre'); })());
+
 `);

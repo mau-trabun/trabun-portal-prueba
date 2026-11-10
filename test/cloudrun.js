@@ -241,6 +241,20 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   await svc12.manejar('POST', '/refrescar', '');
   await new Promise(r => setTimeout(r, 10));
   check('the Test tracker failing never stops the EFA one', escritosEfa.length === 2 && escritos.length === n1);
+  // Destinatarios tab: Encargados read with only its 5 columns (no Last Name), rows identical to Code.js on Apps Script
+  sheets['Encargados'] = [['Nombre para formulario', 'ID RBD', 'Programa que participa', 'Account Name', 'First Name', 'Last Name', 'Email'],
+    [AROMOS, 11111, 'ASE', 'Cuenta Ficticia', 'María', 'Apellido Secreto', 'mj@ejemplo.invalid']];
+  sheets['correos_jdp'] = [['jdp/ci', 'correo'], ['x', 'jdp.x@ejemplo.invalid']];
+  const svc13 = crearServicio({ src, planilla, seguimientoEfa: segEfa, log: silencio });
+  await svc13.manejar('POST', '/refrescar', '');
+  await new Promise(r => setTimeout(r, 10));
+  const snap13 = svc13._estado().snap.tablas, ult = escritosEfa[escritosEfa.length - 1];
+  const esperado13 = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), ctx.reloj_());
+  check('EFA tracker: Encargados only its 5 columns (no last names), correos_jdp read; Destinatarios written like Code.js on Apps Script',
+    snap13['Encargados'][0].join() === 'Nombre para formulario,ID RBD,Programa que participa,First Name,Email' && !JSON.stringify(snap13['Encargados']).includes('Secreto') && !!snap13['correos_jdp']
+    && Object.keys(ult.tabs).join() === 'Resumen,Por JdP,Por programa,Destinatarios' && JSON.stringify(sinEstado({ d: ult.tabs.Destinatarios })) === JSON.stringify(sinEstado({ d: esperado13.tabs.Destinatarios }))
+    && ult.tabs.Destinatarios.some(r => r[0] === 11111 && r[5] === 'mj@ejemplo.invalid' && r[8] === 'aaa111'));
+  delete sheets['Encargados']; delete sheets['correos_jdp'];
   delete sheets['Correos EFA']; delete sheets['Contactos EFA'];
 
   // HTTP layer: CORS by origin, body limit, unknown route

@@ -73,7 +73,7 @@ check('one tab, status lines, contract header: base, 5 roles × resp./esp./%, Ni
   Object.keys(out.tabs).join() === 'Resumen,Por JdP,Por programa' && T[0][0] === 'Actualizado: 03-11-2026 14:32' && /^Actualización automática cada 2 minutos/.test(T[1][0])
   && h.slice(0, 13).join('|') === 'RBD|Colegio|Programa|Modelo|EDI|Jefe/a de Proyecto|Coordinador/a|Correo enviado|Ingresos desde la apertura|Último ingreso|Compartió la EFA|Contactos en SF (sin ajustes)|Respuestas'
   && h.slice(13, 28).join('|') === 'Director/a resp.|Director/a esp.|Director/a %|Encargado/a resp.|Encargado/a esp.|Encargado/a %|Mentor/a resp.|Mentor/a esp.|Mentor/a %|Otros líderes resp.|Otros líderes esp.|Otros líderes %|Docentes resp.|Docentes esp.|Docentes %'
-  && h[28] === 'Niveles sin docentes' && h[29] === '1° básico doc.' && h[30] === '1° básico cursos' && h[h.length - 1] === 'IV° medio cursos' && h.length === 29 + 2 * 12);
+  && h[28] === 'Niveles sin docentes' && h[29] === '1° básico resp.' && h[30] === '1° básico cursos' && h[h.length - 1] === 'IV° medio cursos' && h.length === 29 + 2 * 12);
 check('rows: school-programs with an EFA link or responses; Control left out', T.length === 6 && !!a && !!rl && !!f && !fila('33333', 'ASE'));
 check('Respuestas = the portal total (dedup email + role)', (() => {
   const p = post({ rbd: '11111', clave: 'aaa111' }).programas, q = post({ rbd: '22222', clave: 'bbb222' }).programas;
@@ -120,15 +120,15 @@ check('Correo enviado from Correos EFA (date only); logins since the EFA opened,
   a['Correo enviado'] === '02-11-2026' && f['Correo enviado'] === '' && a['Ingresos desde la apertura'] === 1 && a['Último ingreso'] === '03-11-2026 10:00');
 check('Compartió la EFA per program, deduplicated; Test shares and internal ones left out', a['Compartió la EFA'] === 'WhatsApp, QR' && rl['Compartió la EFA'] === 'link' && f['Compartió la EFA'] === '');
 check('ASE docentes by grade: count per declared grade, CxN as cursos; outside the registered grades flagged; REL blank',
-  a['5° básico doc.'] === 1 && a['5° básico cursos'] === 2 && a['I° medio doc.'] === 1 && a['I° medio cursos'] === 'Fuera de lo registrado'
-  && a['1° básico doc.'] === 0 && f['5° básico doc.'] === 1 && f['6° básico doc.'] === 1 && f['4° básico doc.'] === 1 && f['1° básico doc.'] === ''
-  && rl['5° básico doc.'] === '' && rl['Niveles sin docentes'] === '');
+  a['5° básico resp.'] === 1 && a['5° básico cursos'] === 2 && a['I° medio resp.'] === 1 && a['I° medio cursos'] === 'Fuera de lo registrado'
+  && a['1° básico resp.'] === 0 && f['5° básico resp.'] === 1 && f['6° básico resp.'] === 1 && f['4° básico resp.'] === 1 && f['1° básico resp.'] === ''
+  && rl['5° básico resp.'] === '' && rl['Niveles sin docentes'] === '');
 check('Niveles sin docentes: implemented grades with no docente (short labels)', a['Niveles sin docentes'] === '1°, 2°, 3°, 4°, 7°, 8°' && f['Niveles sin docentes'] === '7°, 8°, I°, II°, III°, IV°');
 check('header notes: what Contactos en SF (sin ajustes), Respuestas, roles, Otros líderes and the grade block mean',
   /^Contactos vigentes de la implementación en el reporte de Salesforce .*tal como están\\. No es el total esperado/.test(notaEnc('Contactos en SF (sin ajustes)')) && /1 contacto no tiene colegio en Salesforce/.test(notaEnc('Contactos en SF (sin ajustes)'))
   && /No se muestran: 1 respuesta de un programa Control, 1 respuesta de un RBD que no está en SF \\(pruebas incluidas\\), 1 respuesta de un programa que el colegio no tiene en SF\\.$/.test(notaEnc('Respuestas'))
   && !out.notas['Resumen'].some(([r, c, t]) => r === 2 && /sin rol/.test(t)) && !notaEnc('Director/a resp.')
-  && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico doc.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
+  && /Equipo Directivo/.test(notaEnc('Otros líderes resp.')) && /cursos = CxN en SF/.test(notaEnc('1° básico resp.')) && /desde el 02-11-2026/.test(notaEnc('Ingresos desde la apertura')));
 check('note on Respuestas: several roles, repeats dropped', nota(11111, 'ASE', 'Respuestas') === '1 respuesta sin rol: cuenta en Respuestas totales, pero no en la desagregación por rol. La encuesta siempre pide el rol: revísala.\\n6 respuestas de 5 personas: 1 persona respondió más de una vez la encuesta, con un rol distinto cada vez; cada envío cuenta como una respuesta.\\nSe descartó 1 envío repetido (mismo correo y rol); de cada persona y rol cuenta el envío más reciente.');
 check('note on Respuestas: "todos los roles", "ambos roles", unknown role, before the opening',
   nota(11111, 'REL', 'Respuestas') === '1 respuesta «Cumplo todos los roles» cuenta en las columnas Encargado/a, Mentor/a y Docentes; en Respuestas, una vez. La encuesta no le pregunta niveles.\\n'
@@ -149,7 +149,7 @@ check('notes on Contactos en SF (sin ajustes): repeated email (same role / one w
 check('note on a grade outside the registered ones', nota(11111, 'ASE', 'I° medio cursos') === 'Fuera de lo registrado: SF no tiene este nivel en el programa, pero 1 docente lo declaró.');
 check('gray blocks: Director/a, Mentor/a, Docentes (3 columns each), then every other grade pair',
   out.formato['Resumen'].gris.slice(0, 9).map(c => h[c]).join() === 'Director/a resp.,Director/a esp.,Director/a %,Mentor/a resp.,Mentor/a esp.,Mentor/a %,Docentes resp.,Docentes esp.,Docentes %'
-  && out.formato['Resumen'].gris.slice(9, 13).map(c => h[c]).join() === '1° básico doc.,1° básico cursos,3° básico doc.,3° básico cursos');
+  && out.formato['Resumen'].gris.slice(9, 13).map(c => h[c]).join() === '1° básico resp.,1° básico cursos,3° básico resp.,3° básico cursos');
 check('rows have the header width; RBD as a number', T.slice(3).every(r => r.length === h.length) && a.RBD === 11111);
 check('notes point inside the tab (header row or below, column within the header)', out.notas['Resumen'].every(([r, c]) => r >= 2 && r < T.length && c < h.length));
 check('no names or emails anywhere', !/@|Fuentes|Ríos|Ficticio|Acepta|Mella/.test(JSON.stringify(out)));
@@ -266,6 +266,44 @@ check('counts in the notes: one person with three roles is 1 persona; three role
     && C.includes('1 correo tiene roles distintos en filas distintas («Director/a» y «Mentor/a» y «Otro»): cuenta en cada rol')
     && C.includes('1 correo aparece más de una vez, siempre sin Rol en la Implementación') && !C.includes('mismo rol')
     && C.includes('en otros colegios (RBD 11111, 33333)');
+})());
+check('expected fixed by hand (SEG_ESPERADO_FIJO): 0 over SF and the automatic 1, with a note; a response there is flagged', (() => {
+  vm.runInContext("SEG_ESPERADO_FIJO['11111|rel'] = { director: 0 }", ctx);
+  const o = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj), TT = o.tabs['Resumen'], hh = TT[2];
+  vm.runInContext("delete SEG_ESPERADO_FIJO['11111|rel']", ctx);
+  const r = TT.find(x => x[0] === 11111 && x[2] === 'REL'), fila = TT.indexOf(r);
+  const n = c => (o.notas['Resumen'].find(([f, j]) => f === fila && hh[j] === c) || [])[2] || '';
+  return r[hh.indexOf('Director/a esp.')] === 0 && /Esperado fijado en 0 para este colegio y programa/.test(n('Director/a esp.')) && !/automático/.test(n('Director/a esp.'))
+    && (r[hh.indexOf('Director/a resp.')] ? /Esperado fijado en 0 para este colegio, pero hay/.test(n('Director/a resp.')) : true)
+    && TT.find(x => x[0] === 11111 && x[2] === 'ASE')[hh.indexOf('Director/a esp.')] !== 0;
+})());
+check('the two real exceptions are listed (8625 REL, 24407 REL: Director/a 0)', vm.runInContext("JSON.stringify(SEG_ESPERADO_FIJO)", ctx) === '{"8625|rel":{"director":0},"24407|rel":{"director":0}}');
+check('Destinatarios: no Encargados tab → not written', !out.tabs['Destinatarios']);
+check('Destinatarios: one row per school and JdP with recipients, CC (coordinator, never the JdP), clave, EFA window; header on row 3', (() => {
+  sheets['Encargados'] = [['Nombre para formulario', 'ID RBD', 'Programa que participa', 'Account Name', 'First Name', 'Last Name', 'Email'],
+    [AROMOS, 11111, 'ASE', 'x', 'MARÍA', 'x', 'mj@ejemplo.invalid'], [AROMOS, 11111, 'Religión', 'x', 'pedro', 'x', 'pedro@ejemplo.invalid'],
+    [FARO, 22222, 'ASE', 'x', 'ana', 'x', 'ana@ejemplo.invalid']];
+  sheets['correos_jdp'] = [['jdp/ci', 'correo'], ['x', 'jdp.x@ejemplo.invalid'], ['Coordinadora Uno', 'coord@ejemplo.invalid']];
+  const sf = sheets['SF'].find(r => r[0] === 11111 && r[3] === 'Religión'), iC = sheets['SF'][0].indexOf('Coordinador'), antes = sf[iC];
+  sf[iC] = 'Coordinadora Uno';
+  const o = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj), D = o.tabs['Destinatarios'];
+  sf[iC] = antes; delete sheets['Encargados']; delete sheets['correos_jdp'];
+  const h = D[2], row = rbd => { const r = D.find(x => x[0] === rbd); return r && Object.fromEntries(h.map((k, i) => [k, r[i]])); };
+  const a = row(11111), f = row(22222);
+  return h.join('|') === 'RBD|Colegio|Programas|Jefe/a de Proyecto|Correo JdP|Para|Nombres|CC|Clave|Cierre EFA|Fase EFA|Observaciones'
+    && /^Actualizado/.test(D[0][0]) && a.Programas === 'ASE + REL' && a['Correo JdP'] === 'jdp.x@ejemplo.invalid' && a.Para === 'mj@ejemplo.invalid, pedro@ejemplo.invalid'
+    && a.Nombres === 'María, Pedro' && a.CC === 'coord@ejemplo.invalid' && a.Clave === 'aaa111' && a['Cierre EFA'] === '2026-11-13' && a['Fase EFA'] === 'open' && a.Observaciones === ''
+    && f.Para === 'ana@ejemplo.invalid' && f.Clave === 'bbb222' && !D.some(r => r[0] === 33333) && o.notas['Destinatarios'].length === 0;
+})());
+check('Destinatarios: programs with different JdPs → one row each; missing JdP email and encargado flagged', (() => {
+  sheets['Encargados'] = [['Nombre para formulario', 'ID RBD', 'Programa que participa', 'Account Name', 'First Name', 'Last Name', 'Email']];
+  sheets['correos_jdp'] = [['jdp/ci', 'correo'], ['x', 'jdp.x@ejemplo.invalid']];
+  const sf = sheets['SF'].find(r => r[0] === 11111 && r[3] === 'Religión'), iJ = sheets['SF'][0].indexOf('Jefe de Proyecto'), antes = sf[iJ];
+  sf[iJ] = 'Otra Jefa';
+  const D = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj).tabs['Destinatarios'];
+  sf[iJ] = antes; delete sheets['Encargados']; delete sheets['correos_jdp'];
+  const r = D.filter(x => x[0] === 11111);
+  return r.length === 2 && r.some(x => x[2] === 'ASE' && x[3] === 'x') && r.some(x => x[2] === 'REL' && x[3] === 'Otra Jefa' && /Sin correo en correos_jdp para Otra Jefa/.test(x[11]) && /Sin encargado/.test(x[11]));
 })());
 check('the Test tracker is unchanged by the EFA sources', Object.keys(ctx.seguimiento_(d, s, reloj).tabs).join() === 'Resumen,Por curso');
 `);
