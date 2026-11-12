@@ -147,8 +147,8 @@ function crearServicio({ src, planilla, seguimiento = null, seguimientoEfa = nul
   const lectura = Object.keys(TABS).filter(k => k !== 'metricas').map(k => TABS[k]);
   const sinFechas = [TABS.respTest]; // the big tab: no date column is read from it
   const columnas = {};
-  // The trackers also need portal use and the email date (only RBD + Enviado); the EFA one, SF contacts without names
-  // (Email only to spot repeats), and for its Destinatarios tab the encargados (first name + email) and correos_jdp
+  // The trackers also need portal use and the email date (only RBD + Enviado); the EFA one, SF contacts (Email to spot
+  // repeats; Email, then first name + first surname, to match a response to its contact; never written), Ajustes EFA, and for its Destinatarios tab the encargados (first name + email) and correos_jdp
   if (seguimiento || seguimientoEfa) lectura.push(TABS.metricas);
   if (seguimiento) {
     const correos = vm.runInContext('TAB_CORREOS', ctx);
@@ -160,6 +160,7 @@ function crearServicio({ src, planilla, seguimiento = null, seguimientoEfa = nul
     lectura.push(correos, contactos);
     columnas[correos] = ['RBD', 'Enviado'];
     columnas[contactos] = vm.runInContext('COLS_CONTACTOS_EFA', ctx);
+    lectura.push(vm.runInContext('TAB_AJUSTES_EFA', ctx)); // hand adjustments (Mau 12-11-2026); optional tab
     // Destinatarios tab (Mau 06-11-2026): encargados' first name + email per RBD, and the JdP / coordinator emails
     const encargados = vm.runInContext('TAB_ENCARGADOS', ctx), jdp = vm.runInContext('TAB_CORREOS_JDP', ctx);
     lectura.push(encargados, jdp);

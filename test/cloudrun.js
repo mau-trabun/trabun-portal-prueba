@@ -227,8 +227,8 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   await svc11.manejar('POST', '/refrescar', '');
   await new Promise(r => setTimeout(r, 10));
   const snapEfa = svc11._estado().snap.tablas;
-  check('EFA tracker on: Contactos EFA only its 4 columns (no names), Correos EFA only RBD + Enviado; Correos Test not read',
-    snapEfa['Contactos EFA'][0].join() === 'Nombre para formulario,Implementación: Record Type,Rol en la Implementacióon,Email' && !JSON.stringify(snapEfa['Contactos EFA']).includes('Ficticio')
+  check('EFA tracker on: Contactos EFA only its columns (first + last name to match responses, no account), Correos EFA only RBD + Enviado; Correos Test not read',
+    snapEfa['Contactos EFA'][0].join() === 'Nombre para formulario,Implementación: Record Type,Rol en la Implementacióon,Email,First Name,Last Name' && !JSON.stringify(snapEfa['Contactos EFA']).includes('Cuenta Ficticia')
     && snapEfa['Correos EFA'][0].join() === 'RBD,Enviado' && !JSON.stringify(snapEfa['Correos EFA']).includes('enc@') && !pedidas.includes('Correos Test') && pedidas.includes('Métricas'));
   const esperadoEfa = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), ctx.reloj_());
   check('EFA tracker written after a snapshot, rows, notes and bands identical to Code.js on Apps Script', escritosEfa.length === 1

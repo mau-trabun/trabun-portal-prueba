@@ -267,17 +267,65 @@ check('counts in the notes: one person with three roles is 1 persona; three role
     && C.includes('1 correo aparece más de una vez, siempre sin Rol en la Implementación') && !C.includes('mismo rol')
     && C.includes('en otros colegios (RBD 11111, 33333)');
 })());
-check('expected fixed by hand (SEG_ESPERADO_FIJO): 0 over SF and the automatic 1, with a note; a response there is flagged', (() => {
-  vm.runInContext("SEG_ESPERADO_FIJO['11111|rel'] = { director: 0 }", ctx);
+check('Ajustes EFA tab: expected set by role over SF and the automatic 1, note with the SF count and the reason; a grade row leaves Niveles sin docentes, with a note; unreadable rows skipped', (() => {
+  sheets['Ajustes EFA'] = [['RBD', 'Programa', 'Rol', 'Esperado', 'Motivo', 'Pedido por'],
+    [11111, 'Religión', 'Director/a', 0, 'Cargo vacante.', 'x'], [11111, 'ASE', '7° básico', '', 'Docente con licencia', 'x'],
+    [11111, 'ASE', 'Docentes', -1, 'negativo: se ignora', ''], [11111, '', 'Mentor/a', 0, 'sin programa: se ignora', ''], ['', 'ASE', 'Mentor/a', 0, '', '']];
   const o = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj), TT = o.tabs['Resumen'], hh = TT[2];
-  vm.runInContext("delete SEG_ESPERADO_FIJO['11111|rel']", ctx);
-  const r = TT.find(x => x[0] === 11111 && x[2] === 'REL'), fila = TT.indexOf(r);
-  const n = c => (o.notas['Resumen'].find(([f, j]) => f === fila && hh[j] === c) || [])[2] || '';
-  return r[hh.indexOf('Director/a esp.')] === 0 && /Esperado fijado en 0 para este colegio y programa/.test(n('Director/a esp.')) && !/automático/.test(n('Director/a esp.'))
-    && (r[hh.indexOf('Director/a resp.')] ? /Esperado fijado en 0 para este colegio, pero hay/.test(n('Director/a resp.')) : true)
-    && TT.find(x => x[0] === 11111 && x[2] === 'ASE')[hh.indexOf('Director/a esp.')] !== 0;
+  delete sheets['Ajustes EFA'];
+  const r = TT.find(x => x[0] === 11111 && x[2] === 'REL'), fila = TT.indexOf(r), ra = TT.find(x => x[0] === 11111 && x[2] === 'ASE'), filaA = TT.indexOf(ra);
+  const n = (fl, c) => (o.notas['Resumen'].find(([f, j]) => f === fl && hh[j] === c) || [])[2] || '';
+  return r[hh.indexOf('Director/a esp.')] === 0 && n(fila, 'Director/a esp.') === 'Esperado ajustado a 0 (en Salesforce: 0): Cargo vacante. Ajuste acordado en la pestaña Ajustes EFA.'
+    && !/automático/.test(n(fila, 'Director/a esp.')) && ra[hh.indexOf('Director/a esp.')] !== 0
+    && a['Niveles sin docentes'].split(', ').indexOf('7°') >= 0 && ra[hh.indexOf('Niveles sin docentes')].split(', ').indexOf('7°') < 0
+    && /^No se esperan respuestas de docentes en este nivel: Docente con licencia\./.test(n(filaA, '7° básico resp.'))
+    && ra[hh.indexOf('Docentes esp.')] === a['Docentes esp.'] && ra[hh.indexOf('Mentor/a esp.')] === a['Mentor/a esp.'];
 })());
-check('the two real exceptions are listed (8625 REL, 24407 REL: Director/a 0)', vm.runInContext("JSON.stringify(SEG_ESPERADO_FIJO)", ctx) === '{"8625|rel":{"director":0},"24407|rel":{"director":0}}');
+check('no Ajustes EFA tab: nothing adjusted', ctx.datosSeguimiento_().ajustes && !Object.keys(ctx.datosSeguimiento_().ajustes).length);
+check('regular program: someone with several SF roles who answered once counts in all of them (a lower role too; by email, else first name + first surname); once per role; noted', (() => {
+  const nR = sheets['Respuestas EFA'].length, nC = sheets['Contactos EFA'].length;
+  sheets['Contactos EFA'].push([AROMOS, 'Cuenta Ficticia', 'ASE', 'x', 'False', '', 'x', 'Pía Andrea', 'Prueba Uno', 'Encargado/a, Docente y Mentor/a', 'pp@ejemplo.invalid', 'True', '']);
+  sheets['Respuestas EFA'].push(['ASE Semi-intensivo', '2026-11-03T17:00:00', 'Mentora', 'Encargada', 'c3@ejemplo.invalid', AROMOS, 'Mentor/a, es decir, acompaño y retroalimento a docentes', '-'],
+    ['ASE Semi-intensivo', '2026-11-03T17:01:00', 'Mentora', 'Encargada', 'c3@ejemplo.invalid', AROMOS, 'Encargado/a del Programa', '-'],
+    ['ASE Semi-intensivo', '2026-11-03T17:02:00', 'pia', 'prueba dos', 'otro.correo@ejemplo.invalid', AROMOS, 'Encargado/a del Programa', '-'],
+    ['ASE Semi-intensivo', '2026-11-03T17:03:00', 'Otro', 'Rol', 'c5@ejemplo.invalid', AROMOS, 'Otro/a líder del establecimiento', '-']);
+  const o = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj), TT = o.tabs['Resumen'], hh = TT[2];
+  sheets['Respuestas EFA'].length = nR; sheets['Contactos EFA'].length = nC;
+  const r = TT.find(x => x[0] === 11111 && x[2] === 'ASE'), fila = TT.indexOf(r), v = c => r[hh.indexOf(c)];
+  const n = c => (o.notas['Resumen'].find(([f, j]) => f === fila && hh[j] === c) || [])[2] || '';
+  return v('Encargado/a resp.') === a['Encargado/a resp.'] + 2 && v('Mentor/a resp.') === a['Mentor/a resp.'] + 2 && v('Docentes resp.') === a['Docentes resp.'] + 1
+    && v('Otros líderes resp.') === a['Otros líderes resp.'] + 1 // SF says Docente, answered Otro/a líder: no SF role answered, nothing added
+    && /1 persona cuenta aquí por su rol en Salesforce/.test(n('Docentes resp.')) && /1 persona cuenta aquí/.test(n('Mentor/a resp.')) // c3 answered Mentor/a herself; pp is the one added
+    && v('Respuestas') === a['Respuestas'] + 4;
+})());
+check('Destinatarios «Ajustes internos» = SÍ only where someone counts in a role they did not mark', (() => {
+  const nC = sheets['Contactos EFA'].length;
+  sheets['Encargados'] = [['Nombre para formulario', 'ID RBD', 'Programa que participa', 'Account Name', 'First Name', 'Last Name', 'Email'], [FARO, 22222, 'ASE', 'x', 'ana', 'x', 'ana@ejemplo.invalid']];
+  const sin = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj).tabs['Destinatarios'];
+  sheets['Contactos EFA'].push(contacto(FARO, 'ASE', 'Docente', 'na@ejemplo.cl'));
+  const con = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj).tabs['Destinatarios'];
+  sheets['Contactos EFA'].length = nC; delete sheets['Encargados'];
+  const flag = D => D.find(x => x[0] === 22222)[D[2].indexOf('Ajustes internos')];
+  return flag(sin) === '' && flag(con) === 'SÍ' && con.find(x => x[0] === 11111)[con[2].indexOf('Ajustes internos')] === '';
+})());
+check('EFA-EDI: no role → SF roles; one of several SF leader roles → all of them; a leader role SF does not give them stays as picked; teacher of an EDI grade → also leader (not outside EDI grades); consents table unchanged', (() => {
+  const nC = sheets['Contactos EFA'].length, nR = sheets['Respuestas EFA'].length;
+  sheets['Contactos EFA'].push(contacto(FARO, 'ASE', 'Docente', 'na@ejemplo.cl'), contacto(FARO, 'ASE', 'Director/a', 'ed@ejemplo.cl'),
+    contacto(FARO, 'ASE', 'Docente y Mentor/a', 'vn@ejemplo.cl'), contacto(FARO, 'ASE', 'Docente y Mentor/a', 'un@ejemplo.cl'),
+    contacto(FARO, 'ASE', 'Mentor/a y Encargado/a', 'em@ejemplo.cl'));
+  sheets['Respuestas EFA'].push(['EFA_EDI', '2026-11-03T10:40:00', 'Encargada', 'Mentora', 'em@ejemplo.cl', FARO, 'Soy Encargado del programa, es decir, estoy a cargo', '-']);
+  const o = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj), TT = o.tabs['Resumen'], hh = TT[2];
+  sheets['Contactos EFA'].length = nC; sheets['Respuestas EFA'].length = nR;
+  const r = TT.find(x => x[0] === 22222 && x[2] === 'ASE'), fila = TT.indexOf(r), v = c => r[hh.indexOf(c)];
+  const n = c => (o.notas['Resumen'].find(([fl, j]) => fl === fila && hh[j] === c) || [])[2] || '';
+  const neg = t => { const P = t.tabs['Por programa'], i = P.findIndex(x => /consentimientos por cohorte/.test(x[1] || '')); // negative consents only
+    return i >= 0 && P.slice(i + 2).filter(x => /EDI/.test(x[1] || '')).map(x => x[4]).join('|'); };
+  return v('Docentes resp.') === f['Docentes resp.'] + 1 && v('Director/a resp.') === f['Director/a resp.'] && v('Otros líderes resp.') === f['Otros líderes resp.'] // ed: picked Equipo Directivo, SF Director/a → as picked
+    && v('Encargado/a resp.') === f['Encargado/a resp.'] + 1
+    && v('Mentor/a resp.') === f['Mentor/a resp.'] + 2 // em (answered Encargado, SF also Mentor/a); vn (5° and 6°: EDI grades of cohort 2025) yes, un (4° only) no
+    && /1 respuesta sin rol cuenta según el rol de la persona en Salesforce/.test(n('Respuestas')) && !/sin rol: cuenta en Respuestas totales/.test(n('Respuestas'))
+    && neg(o) === neg(out) && v('Respuestas') === f['Respuestas'] + 1;
+})());
 check('Destinatarios: no Encargados tab → not written', !out.tabs['Destinatarios']);
 check('Destinatarios: one row per school and JdP with recipients, CC (coordinator, never the JdP), clave, EFA window; header on row 3', (() => {
   sheets['Encargados'] = [['Nombre para formulario', 'ID RBD', 'Programa que participa', 'Account Name', 'First Name', 'Last Name', 'Email'],
@@ -290,9 +338,9 @@ check('Destinatarios: one row per school and JdP with recipients, CC (coordinato
   sf[iC] = antes; delete sheets['Encargados']; delete sheets['correos_jdp'];
   const h = D[2], row = rbd => { const r = D.find(x => x[0] === rbd); return r && Object.fromEntries(h.map((k, i) => [k, r[i]])); };
   const a = row(11111), f = row(22222);
-  return h.join('|') === 'RBD|Colegio|Programas|Jefe/a de Proyecto|Correo JdP|Para|Nombres|CC|Clave|Cierre EFA|Fase EFA|Observaciones'
+  return h.join('|') === 'RBD|Colegio|Programas|Jefe/a de Proyecto|Correo JdP|Para|Nombres|CC|Clave|Cierre EFA|Fase EFA|Ajustes internos|Observaciones'
     && /^Actualizado/.test(D[0][0]) && a.Programas === 'ASE + REL' && a['Correo JdP'] === 'jdp.x@ejemplo.invalid' && a.Para === 'mj@ejemplo.invalid, pedro@ejemplo.invalid'
-    && a.Nombres === 'María, Pedro' && a.CC === 'coord@ejemplo.invalid' && a.Clave === 'aaa111' && a['Cierre EFA'] === '2026-11-13' && a['Fase EFA'] === 'open' && a.Observaciones === ''
+    && a.Nombres === 'María, Pedro' && a.CC === 'coord@ejemplo.invalid' && a.Clave === 'aaa111' && a['Cierre EFA'] === '2026-11-13' && a['Fase EFA'] === 'open' && a['Ajustes internos'] === '' && a.Observaciones === ''
     && f.Para === 'ana@ejemplo.invalid' && f.Clave === 'bbb222' && !D.some(r => r[0] === 33333) && o.notas['Destinatarios'].length === 0;
 })());
 check('Destinatarios: programs with different JdPs → one row each; missing JdP email and encargado flagged', (() => {
@@ -303,7 +351,7 @@ check('Destinatarios: programs with different JdPs → one row each; missing JdP
   const D = ctx.seguimientoEfa_(ctx.cargarDatos_(), ctx.datosSeguimiento_(), reloj).tabs['Destinatarios'];
   sf[iJ] = antes; delete sheets['Encargados']; delete sheets['correos_jdp'];
   const r = D.filter(x => x[0] === 11111);
-  return r.length === 2 && r.some(x => x[2] === 'ASE' && x[3] === 'x') && r.some(x => x[2] === 'REL' && x[3] === 'Otra Jefa' && /Sin correo en correos_jdp para Otra Jefa/.test(x[11]) && /Sin encargado/.test(x[11]));
+  return r.length === 2 && r.some(x => x[2] === 'ASE' && x[3] === 'x') && r.some(x => x[2] === 'REL' && x[3] === 'Otra Jefa' && /Sin correo en correos_jdp para Otra Jefa/.test(x[12]) && /Sin encargado/.test(x[12]));
 })());
 check('the Test tracker is unchanged by the EFA sources', Object.keys(ctx.seguimiento_(d, s, reloj).tabs).join() === 'Resumen,Por curso');
 `);

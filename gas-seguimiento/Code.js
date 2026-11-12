@@ -116,6 +116,9 @@ function correoAvance_(f, numeros, hoy) {
   const intro = `${tu('Te', 'Les')} comparto cómo va la Encuesta de Fin de Año en ${colegio}, con las respuestas recibidas hasta hoy, ${fechaLarga_(hoy)}.`
     + (fase === 'open' && cierra ? ` La encuesta está abierta hasta el ${cierra}.` : '')
     + (fase === 'extra' && cierra ? ` La encuesta tiene una semana extra: sigue abierta hasta el ${cierra}.` : ''); // Cierre EFA = end of the extra week
+  // Schools where someone counts in a role they didn't mark (Destinatarios «Ajustes internos», optional column; Mau 12-11-2026)
+  const ajustes = String(f['Ajustes internos'] == null ? '' : f['Ajustes internos']).trim()
+    ? `Después de algunos ajustes internos, así vamos. En el portal no ${tu('vas', 'van')} a ver estos ajustes: ahí cada respuesta aparece tal como la persona la declaró, sin cambios. Por eso algunos números de este resumen pueden no calzar exactamente con los del portal.` : '';
   const esperadas = 'Las esperadas son las personas que tenemos registradas en el programa para cada rol; quien cumple dos roles cuenta en ambos. '
     + `Si ${tu('ves', 'ven')} que falta alguien o hay alguien que ya no está, ${tu('avísame', 'avísenme')} para actualizarlo.`;
   const recordar = fase === 'open' || fase === 'extra' ? `Si aún faltan personas por responder, ${tu('te', 'les')} pido recordárselo y compartir el link con quienes no lo tengan.` : '';
@@ -130,7 +133,7 @@ function correoAvance_(f, numeros, hoy) {
   const firma = (jdp ? [jdp] : []).concat(['Fundación Trabün']);
 
   const tablaTexto = tablasDatos.map(t => `${TITULO_PROGRAMA[t.p]}:\n` + t.roles.map(x => `• ${x.nombre}: ${miles(x.r)} de ${x.e == null ? '—' : miles(x.e)} (${pct(x)})`).join('\n')).join('\n\n');
-  const texto = [saludo, intro].concat(tablaTexto ? [tablaTexto] : []).concat([esperadas]).concat(recordar ? [recordar] : [])
+  const texto = [saludo, intro].concat(ajustes ? [ajustes] : []).concat(tablaTexto ? [tablaTexto] : []).concat([esperadas]).concat(recordar ? [recordar] : [])
     .concat([`${portalA}Portal de Seguimiento 2026${portalB}`, items.map(i => `• ${i[0]}: ${i[1]}`).join('\n'),
       `${entrar}:\nRBD: ${rbd}\nClave: ${clave}\n${PORTAL_URL}`, reserva, gracias, firma.join('\n')])
     .join('\n\n');
@@ -149,7 +152,7 @@ function correoAvance_(f, numeros, hoy) {
   const titulo = fase === 'closed' ? 'Así terminó la Encuesta de Fin de Año' : 'Así va la Encuesta de Fin de Año';
   const bajada = (titulos.length > 1 ? `Programas de ${conY_(titulos)}` : `Programa de ${titulos[0] || ''}`) + (fase === 'open' && cierra ? ` · abierta hasta el ${cierra}` : '')
     + (fase === 'extra' && cierra ? ` · semana extra hasta el ${cierra}` : '');
-  const html = correoHtml_({ titulo, bajada, gracias, reserva, entrar, rbd, clave, firma, parrafos: [e(saludo), e(intro)], tablas, items });
+  const html = correoHtml_({ titulo, bajada, gracias, reserva, entrar, rbd, clave, firma, parrafos: [e(saludo), e(intro)].concat(ajustes ? [e(ajustes)] : []), tablas, items });
   return { asunto, texto, html };
 }
 

@@ -725,6 +725,7 @@ function datosSeguimiento_() {
     enviados: enviados(TAB_CORREOS),
     enviadosEfa: enviados(TAB_CORREOS_EFA),
     contactos: hay(TAB_CONTACTOS_EFA) ? intentar_(TAB_CONTACTOS_EFA, leerContactosEfa_, null) : null, // null = no expected counts
+    ajustes: hay(TAB_AJUSTES_EFA) ? intentar_(TAB_AJUSTES_EFA, leerAjustesEfa_, {}) : {}, // hand adjustments (Mau 12-11-2026)
     // EFA tracker's Destinatarios tab (Mau 06-11-2026: nothing in the portal Sheet is secret within Trabün)
     encargados: hay(TAB_ENCARGADOS) ? intentar_(TAB_ENCARGADOS, leerEncargados_, null) : null,
     correosJdp: hay(TAB_CORREOS_JDP) ? intentar_(TAB_CORREOS_JDP, leerCorreosJdp_, {}) : {},
@@ -863,23 +864,21 @@ function seguimiento_(d, s, reloj) {
 const SEG_EFA_TAB = 'Resumen';
 const SEG_EFA_JDP = 'Por JdP', SEG_EFA_PROG = 'Por programa';
 const SEG_EFA_DEST_TAB = 'Destinatarios'; // recipients + clave per school and JdP, read by gas-seguimiento/
-const SEG_EFA_DEST = ['RBD', 'Colegio', 'Programas', 'Jefe/a de Proyecto', 'Correo JdP', 'Para', 'Nombres', 'CC', 'Clave', 'Cierre EFA', 'Fase EFA', 'Observaciones']; // sums of Resumen rows (2025 tracker's Resumen JdP / Resumen Programa)
+const SEG_EFA_DEST = ['RBD', 'Colegio', 'Programas', 'Jefe/a de Proyecto', 'Correo JdP', 'Para', 'Nombres', 'CC', 'Clave', 'Cierre EFA', 'Fase EFA', 'Ajustes internos', 'Observaciones']; // sums of Resumen rows (2025 tracker's Resumen JdP / Resumen Programa)
 const SEG_EFA_SUMA = ['Implementaciones', 'Impl. con al menos 1 respuesta', 'Respuestas'];
 // SF report "Contactos EFA '26 (seguimiento)" through the Salesforce connector (daily). Cloud Run downloads only these
 // columns: Email only to spot repeated contacts, never written. SF labels the role field "Implementacióon" (typo).
 const TAB_CONTACTOS_EFA = 'Contactos EFA';
-const COLS_CONTACTOS_EFA = ['Nombre para formulario', 'Implementación: Record Type', 'Rol en la Implementacióon', 'Rol en la Implementación', 'Email'];
+const COLS_CONTACTOS_EFA = ['Nombre para formulario', 'Implementación: Record Type', 'Rol en la Implementacióon', 'Rol en la Implementación', 'Email',
+  'First Name', 'Last Name']; // names only to match a response whose email differs from SF's (first word of each); never written
+// Hand adjustments to the EFA tracker (Mau 12-11-2026), kept in the portal Sheet so the reasons (leaves…) never reach
+// this public repo: RBD | Programa | Rol | Esperado | Motivo (extra columns ignored). CONTRACT.md §1 and §5.
+const TAB_AJUSTES_EFA = 'Ajustes EFA';
 const SEG_ACCIONES_EFA = { efa_copiar_link: 'link', efa_copiar_mensaje: 'mensaje', efa_whatsapp: 'WhatsApp', efa_qr: 'QR' };
 // Tracker roles (as in the 2025 EFA tracker). A response or a contact counts in every role it holds.
 const SEG_COL_CONTACTOS = 'Contactos en SF (sin ajustes)'; // raw SF count, not the expected total (Mau 05-11-2026)
 const SEG_ESPERADO_MINIMO = ['director', 'encargado']; // roles every school has: expected 1 when SF has none
 const SEG_SIN_LIDERES_CUADERNILLOS = ['encargado', 'mentor']; // REL Cuadernillos: expected 0, whatever SF says
-// Per school-program expected counts set by hand, over SF and the automatic 1 (CONTRACT.md §5 lists every exception).
-// 'RBD|programa' → { role: expected }
-const SEG_ESPERADO_FIJO = {
-  '8625|rel': { director: 0 },  // Escuela Industrial Talleres San Vicente de Paul, REL (Mau 10-11-2026)
-  '24407|rel': { director: 0 }, // Colegio Santa Teresa de Jesús de Los Andes, REL (Mau 10-11-2026)
-};
 const SEG_ROLES_EFA = [['director', 'Director/a'], ['encargado', 'Encargado/a'], ['mentor', 'Mentor/a'], ['otros', 'Otros líderes'], ['docente', 'Docentes']];
 const ROLES_SEG_EFA = { // ROLES_EFA short label → tracker roles; an unknown option → Otros líderes, no role → none
   'Director/a': ['director'], 'Equipo Directivo / Convivencia Escolar': ['otros'], 'Encargado/a': ['encargado'], 'Mentor/a': ['mentor'],
@@ -892,14 +891,50 @@ const SEG_EFA = ['RBD', 'Colegio', 'Programa', 'Modelo', 'EDI', 'Jefe/a de Proye
 function leerContactosEfa_() {
   const t = leerTabla_(TAB_CONTACTOS_EFA);
   const c = { nombre: colExacta_(t, 'Nombre para formulario'), tipo: colExacta_(t, 'Implementación: Record Type'),
-    rol: colsPrefijo_(t, 'Rol en la Implementaci', true), correo: colExacta_(t, 'Email') };
+    rol: colsPrefijo_(t, 'Rol en la Implementaci', true), correo: colExacta_(t, 'Email'),
+    nombre1: colsPrefijo_(t, 'First Name'), apellido1: colsPrefijo_(t, 'Last Name') };
   return t.rows.filter(r => r.some(v => v !== '' && v != null)).map(r => ({
     rbd: rbdDeColegio_(r[c.nombre]), // SF "- - 0" = the contact's account is not a school
     programa: programa_(r[c.tipo]),
     rol: limpio_(primero_(r, c.rol)),
     roles: rolesContacto_(primero_(r, c.rol)),
     correo: String(r[c.correo] == null ? '' : r[c.correo]).trim().toLowerCase(),
+    nombre: primeraPalabra_(primero_(r, c.nombre1)),
+    apellido: primeraPalabra_(primero_(r, c.apellido1)),
   }));
+}
+
+const primeraPalabra_ = v => normTexto_(v).split(' ')[0] || '';
+
+// Ajustes EFA → { 'rbd|programa': { roles: { role: { n, motivo } }, niveles: { gradeIdx: motivo } } }. Rol = a tracker
+// role (its expected count becomes Esperado, over SF, the automatic 1 and REL Cuadernillos) or an ASE grade (no
+// teacher expected there: out of "Niveles sin docentes", with a note). Rows that can't be read are skipped.
+function leerAjustesEfa_() {
+  const t = leerTabla_(TAB_AJUSTES_EFA);
+  const c = { rbd: colExacta_(t, 'RBD'), prog: colExacta_(t, 'Programa'), rol: colExacta_(t, 'Rol'), esp: colExacta_(t, 'Esperado'), motivo: colsPrefijo_(t, 'Motivo') };
+  const out = {};
+  t.rows.forEach(r => {
+    const rbd = normRbd_(r[c.rbd]), pr = normTexto_(r[c.prog]);
+    const programa = pr.startsWith('ase') ? 'ase' : pr.startsWith('rel') ? 'rel' : null;
+    if (!rbd || !programa) return;
+    const motivo = String(limpio_(primero_(r, c.motivo)) || '').replace(/[.\s]+$/, '');
+    const k = rolAjuste_(r[c.rol]);
+    const o = out[rbd + '|' + programa] || (out[rbd + '|' + programa] = { roles: {}, niveles: {} });
+    if (k) {
+      const v = r[c.esp], n = Number(v);
+      if (v !== '' && v != null && isFinite(n) && n >= 0) o.roles[k] = { n: Math.round(n), motivo };
+      return;
+    }
+    const i = nivelIdx_(r[c.rol]);
+    if (i >= 0) o.niveles[i] = motivo;
+  });
+  return out;
+}
+
+function rolAjuste_(v) {
+  const n = normTexto_(v);
+  return [['director', 'director'], ['encargad', 'encargado'], ['mentor', 'mentor'], ['otro', 'otros'], ['docente', 'docente']]
+    .filter(x => n.startsWith(x[0])).map(x => x[1])[0] || null;
 }
 
 // SF "Rol en la Implementación" ("Docente", "Mentor/a y Encargado/a", "Encargado/a, Docente y Mentor/a"…) → tracker roles
@@ -991,7 +1026,7 @@ function seguimientoEfa_(d, s, reloj) {
     fuera.programa && pl(fuera.programa, 'respuesta de un programa que el colegio no tiene en SF', 'respuestas de programas que el colegio no tiene en SF')].filter(Boolean);
   nota(2, col('Ingresos desde la apertura'), [`Ingresos al portal${abre ? ' desde el ' + ddmm(abre) : ''}, en cualquier pestaña. Las vistas internas no cuentan.`]);
   nota(2, col(SEG_COL_CONTACTOS), [s.contactos ? 'Contactos vigentes de la implementación en el reporte de Salesforce («Contactos EFA \'26 (seguimiento)», actualización diaria), tal como están. '
-    + 'No es el total esperado: los esperados por rol incluyen ajustes (1 automático en Director/a y Encargado/a, 0 en Encargado/a y Mentor/a de REL Cuadernillos, y esperados fijados a mano para algunos colegios, cada uno con su comentario) y un contacto con varios roles cuenta en cada uno. '
+    + 'No es el total esperado: los esperados por rol incluyen ajustes (1 automático en Director/a y Encargado/a, 0 en Encargado/a y Mentor/a de REL Cuadernillos, y ajustes acordados para algunos colegios en la pestaña ' + TAB_AJUSTES_EFA + ', cada uno con su comentario) y un contacto con varios roles cuenta en cada uno. '
     + 'Si un número no calza, corrígelo en Salesforce.'
     : `Falta la pestaña ${TAB_CONTACTOS_EFA} en la planilla: sin esperados.`,
   sinColegio ? pl(sinColegio, 'contacto no tiene colegio en Salesforce y no se puede asignar.', 'contactos no tienen colegio en Salesforce y no se pueden asignar.') : '']);
@@ -1006,27 +1041,66 @@ function seguimientoEfa_(d, s, reloj) {
   const rolSeg = x => (/^[\s\-–—]*$/.test(x.rol || '') ? null : x.rolCorto);
   // never says why (Mau 03-11-2026): only the count, in the Respuestas note
   const sinRolTexto = n => (n ? `${pl(n, 'respuesta sin rol: cuenta', 'respuestas sin rol: cuentan')} en Respuestas totales, pero no en la desagregación por rol.` : '');
+  // Roles counted from SF (Mau 12-11-2026, CONTRACT.md §1): a response is matched to its SF contact in the same
+  // school-program (email; else first name + first surname, one person only). Regular programs: someone with several
+  // roles answers once (with the highest one), so a response in one of their SF roles counts in all of them. EFA-EDI:
+  // leaders all get the same questions, so a leader response in one of their SF leader roles counts in all of them;
+  // a leader who teaches an EDI grade answers as a teacher, so that response counts in their leader roles too; and a
+  // response without a role counts in their SF roles. A person counts once per role.
+  const LIDERES = ['director', 'encargado', 'mentor', 'otros'];
+  const union = (a, b) => a.concat(b.filter(k => a.indexOf(k) < 0));
   filas.forEach(f => {
     const { p, sp, vig } = f;
     const fila = tab.length;
-    const rolesDe = x => (rolSeg(x) ? ROLES_SEG_EFA[rolSeg(x)] || ['otros'] : []);
-    const r = {}, e = {};
-    SEG_ROLES_EFA.forEach(([k]) => { r[k] = 0; e[k] = ''; });
-    vig.forEach(x => rolesDe(x).forEach(k => { r[k]++; }));
+    const declarados = x => (rolSeg(x) ? ROLES_SEG_EFA[rolSeg(x)] || ['otros'] : []);
     const lista = contactos ? contactos[f.rbd + '|' + p.programa] || [] : null;
-    if (lista) SEG_ROLES_EFA.forEach(([k]) => { e[k] = lista.filter(x => x.roles.indexOf(k) >= 0).length; });
+    const edi = p.programa === 'ase' && !!sp.edi;
+    const papel = edi ? (PAPEL_EDI[sp.anioInicio] || []).map(nivelIdx_) : [];
+    const rolesSf = x => { // the SF roles of the respondent, or null when not found
+      if (!lista) return null;
+      const deCorreo = x.correo ? lista.filter(c => c.correo === x.correo && c.roles.length) : [];
+      const n = primeraPalabra_(x.nombres), a = primeraPalabra_(x.apellidos);
+      const deNombre = deCorreo.length || !n || !a ? [] : lista.filter(c => c.roles.length && c.nombre === n && c.apellido === a);
+      const m = deCorreo.length ? deCorreo : new Set(deNombre.map(c => c.correo)).size === 1 ? deNombre : [];
+      return m.length ? m.reduce((t, c) => union(t, c.roles), []) : null;
+    };
+    const rolesDe = x => {
+      const d = declarados(x), sf = rolesSf(x);
+      if (!sf) return d;
+      const lid = sf.filter(k => LIDERES.indexOf(k) >= 0);
+      if (!edi) return d.some(k => sf.indexOf(k) >= 0) ? union(d, sf) : d;
+      if (!d.length) return sf;
+      // Several leader roles, answered with one of them → all of them. A leader role SF doesn't give them stays as picked
+      // (Mau 12-11-2026: whether to add or move those is pending; today = as picked, nothing taken away)
+      if (d.some(k => LIDERES.indexOf(k) >= 0)) return d.some(k => lid.indexOf(k) >= 0) ? union(d, lid) : d;
+      return lid.length && x.niveles.some(i => papel.indexOf(i) >= 0) ? union(d, lid) : d;
+    };
+    const r = {}, e = {}, eSf = {}, porSf = {};
+    SEG_ROLES_EFA.forEach(([k]) => { r[k] = 0; e[k] = ''; porSf[k] = 0; });
+    const porPersona = {};
+    vig.forEach(x => {
+      const id = x.correo || '#' + x.fila, q = porPersona[id] || (porPersona[id] = { roles: [], marcados: [] });
+      q.roles = union(q.roles, rolesDe(x));
+      q.marcados = union(q.marcados, declarados(x));
+    });
+    Object.keys(porPersona).forEach(id => porPersona[id].roles.forEach(k => { r[k]++; if (porPersona[id].marcados.indexOf(k) < 0) porSf[k]++; }));
+    if (lista) SEG_ROLES_EFA.forEach(([k]) => { e[k] = eSf[k] = lista.filter(x => x.roles.indexOf(k) >= 0).length; });
     // Every school has a Director/a and an Encargado/a (Mau 05-11-2026): when SF has none, expect 1 (SF rules otherwise)
     const automatico = {};
     if (lista) SEG_ESPERADO_MINIMO.forEach(k => { if (!e[k]) { e[k] = 1; automatico[k] = true; } });
     // REL Cuadernillos (the SIP ones get the EFA): encargados and mentores don't answer it (Mau 05-11-2026), expected 0 over SF
     const sinLideres = {};
     if (lista && p.programa === 'rel' && normTexto_(sp.modelo) === 'cuadernillos') SEG_SIN_LIDERES_CUADERNILLOS.forEach(k => { e[k] = 0; sinLideres[k] = true; automatico[k] = false; });
-    // Fixed by hand for this school-program (SEG_ESPERADO_FIJO), over everything above
+    // Ajustes EFA tab (Mau 12-11-2026: leaves, vacancies, agreed exceptions), over everything above
+    const aj = (s.ajustes || {})[f.rbd + '|' + p.programa] || { roles: {}, niveles: {} };
     const fijo = {};
-    const fijos = SEG_ESPERADO_FIJO[f.rbd + '|' + p.programa] || {};
-    if (lista) Object.keys(fijos).forEach(k => { e[k] = fijos[k]; fijo[k] = true; automatico[k] = false; sinLideres[k] = false; });
-    const sinRol = vig.filter(x => !rolSeg(x)).length;
-    Object.assign(f, { r, e, sinRol, nContactos: lista ? lista.length : '' }); // for Por JdP / Por programa
+    if (lista) Object.keys(aj.roles).forEach(k => { e[k] = aj.roles[k].n; fijo[k] = aj.roles[k]; automatico[k] = false; sinLideres[k] = false; });
+    const sinRol = vig.filter(x => !rolSeg(x)).length; // every response without a role (EFA-EDI consents table)
+    const sinRolUbicadas = vig.filter(x => !rolSeg(x) && rolesDe(x).length).length;
+    const sinRolSueltas = sinRol - sinRolUbicadas; // in no role column
+    // someone counted in a role they didn't mark: the portal (what each person declared) won't match these numbers
+    const difierePortal = SEG_ROLES_EFA.some(([k]) => porSf[k] > 0) || sinRolUbicadas > 0;
+    Object.assign(f, { r, e, sinRol, sinRolSueltas, difierePortal, nContactos: lista ? lista.length : '' }); // for Por JdP / Por programa / Destinatarios
 
     // Respuestas: why the numbers don't add up
     const conCorreo = vig.filter(x => x.correo), personas = new Set(conCorreo.map(x => x.correo)).size + vig.length - conCorreo.length;
@@ -1037,7 +1111,8 @@ function seguimientoEfa_(d, s, reloj) {
     const antes = abre ? vig.filter(x => x.fecha != null && dia(x.fecha) < abre).length : 0;
     const repetidos = f.resps.length - vig.length;
     nota(fila, col('Respuestas'), [
-      sinRolTexto(sinRol) + (sinRol && !sp.edi ? ` La encuesta siempre pide el rol: ${sinRol === 1 ? 'revísala' : 'revísalas'}.` : ''),
+      sinRolTexto(sinRolSueltas) + (sinRolSueltas && !sp.edi ? ` La encuesta siempre pide el rol: ${sinRolSueltas === 1 ? 'revísala' : 'revísalas'}.` : ''),
+      sinRolUbicadas ? `${pl(sinRolUbicadas, 'respuesta sin rol cuenta', 'respuestas sin rol cuentan')} según el rol de la persona en Salesforce.` : '',
       vig.length > personas ? `${pl(vig.length, 'respuesta', 'respuestas')} de ${pl(personas, 'persona', 'personas')}: ${pl(variasVeces, 'persona respondió', 'personas respondieron')} más de una vez la encuesta, con un rol distinto cada vez; cada envío cuenta como una respuesta.` : '',
       repetidos ? `Se ${repetidos === 1 ? 'descartó 1 envío repetido' : 'descartaron ' + miles(repetidos) + ' envíos repetidos'} (mismo correo y rol); de cada persona y rol cuenta el envío más reciente.` : '',
       todos ? `${pl(todos, 'respuesta «Cumplo todos los roles» cuenta', 'respuestas «Cumplo todos los roles» cuentan')} en las columnas Encargado/a, Mentor/a y Docentes; en Respuestas, ${todos === 1 ? 'una vez' : 'una vez cada una'}. La encuesta no le pregunta niveles.` : '',
@@ -1052,10 +1127,11 @@ function seguimientoEfa_(d, s, reloj) {
       const cR = cRol + 3 * j;
       if (lista && e[k] && r[k] > e[k]) nota(fila, cR, [`${miles(r[k] - e[k])} sobre lo esperado (esperado: ${miles(e[k])}).`]);
       else if (sinLideres[k] && r[k]) nota(fila, cR, [`Encargados y mentores no responden EFA, pero hay ${pl(r[k], 'respuesta', 'respuestas')}.`]);
-      else if (fijo[k] && !e[k] && r[k]) nota(fila, cR, [`Esperado fijado en 0 para este colegio, pero hay ${pl(r[k], 'respuesta', 'respuestas')}.`]);
+      else if (fijo[k] && !e[k] && r[k]) nota(fila, cR, [`Esperado ajustado a 0 para este colegio, pero hay ${pl(r[k], 'respuesta', 'respuestas')}.`]);
       else if (lista && !e[k] && r[k]) nota(fila, cR, [`Sin contactos con este rol en Salesforce, pero hay ${pl(r[k], 'respuesta', 'respuestas')}.`]);
       if (sinLideres[k]) nota(fila, cR + 1, ['Encargados y mentores no responden EFA.']);
-      if (fijo[k]) nota(fila, cR + 1, [`Esperado fijado en ${miles(e[k])} para este colegio y programa (excepción acordada; no viene de Salesforce).`]);
+      if (porSf[k]) nota(fila, cR, [`${pl(porSf[k], 'persona cuenta', 'personas cuentan')} aquí por su rol en Salesforce, aunque en la encuesta ${porSf[k] === 1 ? 'marcó' : 'marcaron'} otro rol o ninguno: cada persona responde una vez.`]);
+      if (fijo[k]) nota(fila, cR + 1, [`Esperado ajustado a ${miles(e[k])} (en Salesforce: ${miles(eSf[k])})${fijo[k].motivo ? ': ' + fijo[k].motivo : ''}. Ajuste acordado en la pestaña ${TAB_AJUSTES_EFA}.`]);
       if (automatico[k]) nota(fila, cR + 1, [`Esperado automático: Salesforce no tiene ${nombre} vigente para esta implementación, así que se asume 1. Para que este comentario desaparezca, actualiza el contacto en SF.`]);
     });
 
@@ -1085,7 +1161,7 @@ function seguimientoEfa_(d, s, reloj) {
     // ASE docentes by grade
     const grupos = gruposDe(f);
     if (p.programa === 'ase') {
-      const docentes = vig.filter(x => rolesDe(x).indexOf('docente') >= 0);
+      const docentes = vig.filter(x => declarados(x).indexOf('docente') >= 0); // grades: only who answered as docente
       const varios = docentes.filter(x => x.niveles.length > 1), sinNivel = docentes.filter(x => !x.niveles.length).length;
       if (varios.length || sinNivel) {
         const suma = docentes.reduce((t, x) => t + x.niveles.length, 0);
@@ -1098,6 +1174,7 @@ function seguimientoEfa_(d, s, reloj) {
       const n = grupos.find(x => x.nivel === NIVELES[i]);
       if (!n) return ['', ''];
       const cC = cGrado + 2 * k + 1;
+      if (aj.niveles[i] != null) nota(fila, cC - 1, [`No se esperan respuestas de docentes en este nivel${aj.niveles[i] ? ': ' + aj.niveles[i] : ''}. Ajuste acordado en la pestaña ${TAB_AJUSTES_EFA}.`]);
       if (!n.registrado) nota(fila, cC, [`Fuera de lo registrado: SF no tiene este nivel en el programa, pero ${pl(n.r, 'docente lo declaró', 'docentes lo declararon')}.`]);
       else if (!n.cursos) nota(fila, cC, ['Sin CxN en SF para este nivel.']);
       return [n.r, !n.registrado ? 'Fuera de lo registrado' : n.cursos || ''];
@@ -1106,7 +1183,7 @@ function seguimientoEfa_(d, s, reloj) {
       fecha(s.enviadosEfa[f.rbd]), f.u.ingresos, conFormato(f.u.ultimo, true), f.u.acciones[p.programa].join(', '),
       lista ? lista.length : '', vig.length]
       .concat([].concat.apply([], SEG_ROLES_EFA.map(([k]) => [r[k], e[k], lista ? pct(r[k], e[k]) : ''])))
-      .concat([grupos.filter(n => n.registrado && !n.r).map(n => corto(n.nivel)).join(', ')], celdas));
+      .concat([grupos.filter(n => n.registrado && !n.r && aj.niveles[nivelIdx_(n.nivel)] == null).map(n => corto(n.nivel)).join(', ')], celdas));
   });
   // Gray / white blocks: every other role (resp. + esp. + %), then every other grade (doc. + cursos)
   const gris = [].concat.apply([], SEG_ROLES_EFA.map((_, j) => (j % 2 ? [] : [cRol + 3 * j, cRol + 3 * j + 1, cRol + 3 * j + 2])))
@@ -1146,7 +1223,7 @@ function seguimientoEfa_(d, s, reloj) {
       if (b.titulo) t.push(['', b.titulo]);
       t.push(['', b.etiqueta].concat(b.columnas || SEG_EFA_SUMA.concat(SEG_ROLES_EFA.map(r => '% Avance ' + r[1]))));
       b.filas.forEach(g => {
-        const sr = g.filas.reduce((n, f) => n + f.sinRol, 0);
+        const sr = g.filas.reduce((n, f) => n + f.sinRolSueltas, 0);
         if (sr && !b.valores) notasR.push([t.length, cResp, sinRolTexto(sr)]);
         if (!b.valores) topes(g.filas).forEach((x, j) => { if (x.tope) notasR.push([t.length, cResp + 1 + j, nombre === SEG_EFA_JDP ? textoTope(x) : textoTopeP(x)]); });
         t.push(['', g.nombre].concat((b.valores || sumar)(g.filas)));
@@ -1210,7 +1287,7 @@ function seguimientoEfa_(d, s, reloj) {
         !enc.length ? `Sin encargado en la pestaña ${TAB_ENCARGADOS}` : '', !s.claves[f0.rbd] ? 'Sin clave en Contraseñas' : ''].filter(Boolean);
       dest.push([Number(f0.rbd), f0.col.nombre || '', grupo.map(f => prog(f.p)).join(' + '), jdp, correoJdp,
         enc.map(e => e.email).join(', '), enc.map(e => e.nombre).filter(Boolean).join(', '), cc.join(', '), s.claves[f0.rbd] || '',
-        cierreDest || '', v.fase || '', obs.join(' · ')]);
+        cierreDest || '', v.fase || '', grupo.some(f => f.difierePortal) ? 'SÍ' : '', obs.join(' · ')]);
     });
     tabs[SEG_EFA_DEST_TAB] = dest;
     notasT[SEG_EFA_DEST_TAB] = [];

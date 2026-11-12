@@ -71,3 +71,8 @@ ctx.generarBorradoresAvance(['22222|ASE']);
 check('extra week: says so with the real closing date, still asks to remind', borradores.length === 1
   && borradores[0].body.includes('La encuesta tiene una semana extra: sigue abierta hasta el') && /20 de noviembre/.test(borradores[0].body)
   && borradores[0].body.includes('les pido recordárselo') === false && /recordárselo/.test(borradores[0].body) && /semana extra hasta el/.test(borradores[0].o.htmlBody));
+reset(); sheets.Destinatarios[2].splice(11, 0, 'Ajustes internos'); sheets.Destinatarios.slice(3).forEach((r, i) => r.splice(11, 0, i === 1 ? 'SÍ' : ''));
+ctx.generarBorradoresAvance(['11111|ASE + REL', '22222|ASE']);
+check('«Ajustes internos» → paragraph after the intro (text and html), only for flagged schools; old Destinatarios without the column still works', borradores.length === 2
+  && !/ajustes internos/.test(borradores[0].body) && /Después de algunos ajustes internos, así vamos\. En el portal no vas a ver estos ajustes: ahí cada respuesta aparece tal como la persona la declaró, sin cambios\./.test(borradores[1].body)
+  && borradores[1].body.indexOf('ajustes internos') > borradores[1].body.indexOf('Te comparto') && /ajustes internos/.test(borradores[1].o.htmlBody));
