@@ -114,10 +114,11 @@ function correoAvance_(f, numeros, hoy) {
 
   const saludo = `Hola${nombres.length ? ', ' + conY_(nombres) : ''}:`;
   const intro = `${tu('Te', 'Les')} comparto cómo va la Encuesta de Fin de Año en ${colegio}, con las respuestas recibidas hasta hoy, ${fechaLarga_(hoy)}.`
-    + (fase === 'open' && cierra ? ` La encuesta está abierta hasta el ${cierra}.` : '');
+    + (fase === 'open' && cierra ? ` La encuesta está abierta hasta el ${cierra}.` : '')
+    + (fase === 'extra' && cierra ? ` La encuesta tiene una semana extra: sigue abierta hasta el ${cierra}.` : ''); // Cierre EFA = end of the extra week
   const esperadas = 'Las esperadas son las personas que tenemos registradas en el programa para cada rol; quien cumple dos roles cuenta en ambos. '
     + `Si ${tu('ves', 'ven')} que falta alguien o hay alguien que ya no está, ${tu('avísame', 'avísenme')} para actualizarlo.`;
-  const recordar = fase === 'open' ? `Si aún faltan personas por responder, ${tu('te', 'les')} pido recordárselo y compartir el link con quienes no lo tengan.` : '';
+  const recordar = fase === 'open' || fase === 'extra' ? `Si aún faltan personas por responder, ${tu('te', 'les')} pido recordárselo y compartir el link con quienes no lo tengan.` : '';
   const portalA = 'En el ', portalB = ` ${tu('vas', 'van')} a encontrar:`;
   const items = [
     ['El link de la encuesta', `de ${tu('tu', 'su')} colegio, listo para copiar o enviar por WhatsApp con un mensaje para el equipo.`, COLOR.naranjo],
@@ -146,7 +147,8 @@ function correoAvance_(f, numeros, hoy) {
     .concat(recordar ? [p(e(recordar))] : []).concat([p(`${e(portalA)}<b>Portal de Seguimiento 2026</b>${e(portalB)}`)]);
 
   const titulo = fase === 'closed' ? 'Así terminó la Encuesta de Fin de Año' : 'Así va la Encuesta de Fin de Año';
-  const bajada = (titulos.length > 1 ? `Programas de ${conY_(titulos)}` : `Programa de ${titulos[0] || ''}`) + (fase === 'open' && cierra ? ` · abierta hasta el ${cierra}` : '');
+  const bajada = (titulos.length > 1 ? `Programas de ${conY_(titulos)}` : `Programa de ${titulos[0] || ''}`) + (fase === 'open' && cierra ? ` · abierta hasta el ${cierra}` : '')
+    + (fase === 'extra' && cierra ? ` · semana extra hasta el ${cierra}` : '');
   const html = correoHtml_({ titulo, bajada, gracias, reserva, entrar, rbd, clave, firma, parrafos: [e(saludo), e(intro)], tablas, items });
   return { asunto, texto, html };
 }

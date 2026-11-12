@@ -2858,8 +2858,11 @@ window.qrcode=qrcode;
       if (!ve || !ve.fase) return "";
       const b = t => `<b>${esc(t)}</b>`;
       if (ve.fase === "pre") return `Abre el ${b(fechaCorta(ve.abre))} · disponible hasta el ${b(fechaCorta(ve.cierra))}`;
-      if (ve.fase === "closed") return `Cerrada el ${b(fechaCorta(ve.cierra))}`;
+      if (ve.fase === "closed") return `Cerrada el ${b(fechaCorta(ve.extension || ve.cierra))}`;
       const d = ve.diasRestantes;
+      // Extra week (Config <encuesta>_extension, Mau 12-11-2026): said plainly, counted to the extension
+      if (ve.fase === "extra") return d === 0 ? `${b("Semana extra")} · ${b("cierra hoy")}`
+        : `${b("Semana extra")} · abierta hasta el ${b(fechaCorta(ve.extension))} · ${d === 1 ? b("cierra mañana") : `cierra en ${b(`${d} días`)}`}`;
       if (d === 0) return `Abierta · ${b("cierra hoy")}`;
       return `Abierta hasta el ${b(fechaCorta(ve.cierra))} · ${d === 1 ? b("cierra mañana") : `cierra en ${b(`${d} días`)}`}`;
     }
@@ -3085,7 +3088,11 @@ window.qrcode=qrcode;
       if (!ve || !ve.fase) return "";
       const nombre = ENCUESTAS[clave].nombre;
       const texto = ve.fase === "pre" ? `${nombre} abre el ${fechaLarga(ve.abre)}. Ya puedes compartir el link: se activará ese día.`
-        : ve.fase === "closed" ? `${nombre} cerró el ${fechaLarga(ve.cierra)}. Estos son los datos finales.` : "";
+        // Extra week: positive, in the team's words (Mau 12-11-2026)
+        : ve.fase === "extra" ? (clave === "efa"
+          ? `¡Es muy importante para nosotros escuchar las voces de quienes viven nuestro programa en las escuelas! Por eso, extendimos el plazo de la encuesta hasta el ${fechaConDia(ve.extension)}. Los links siguen funcionando: puedes volver a compartirlos con quienes aún no responden.`
+          : `Extendimos el plazo del ${nombre} hasta el ${fechaConDia(ve.extension)}. Los links siguen funcionando: puedes volver a compartirlos con los cursos que aún no responden.`)
+        : ve.fase === "closed" ? `${nombre} cerró el ${fechaLarga(ve.extension || ve.cierra)}. Estos son los datos finales.` : "";
       return texto ? `<div class="nota">${ICONOS.calendario}<div>${esc(texto)}</div></div>` : "";
     }
 
@@ -3176,7 +3183,7 @@ window.qrcode=qrcode;
       const links = linksVisibles(prog, clave);
       if (!links.length) return ""; // no link yet: the section simply doesn't render
       const sh = shDe(prog.programa, clave);
-      const conAvance = clave === "test" && ve && ve.fase === "open";
+      const conAvance = clave === "test" && abierta(ve);
       const msg = mensajeCompartir(prog, clave, links, conAvance && sh.incluir);
       const id = `${prog.programa}|${clave}`;
       const ev = accion => `data-evento="${clave}_${accion}" data-evento-programa="${prog.programa}"`;
@@ -3225,10 +3232,12 @@ window.qrcode=qrcode;
     }
 
     // "el 13 de octubre y el 20 de noviembre" / "el 2 y el 13 de noviembre"
+    const abierta = ve => !!ve && (ve.fase === "open" || ve.fase === "extra"); // extra week counts as open
+
     function entreFechas(ve) {
-      const a = partesFecha(ve.abre), c = partesFecha(ve.cierra);
+      const a = partesFecha(ve.abre), c = partesFecha(ve.fase === "extra" ? ve.extension : ve.cierra);
       if (!a || !c) return "";
-      return a.mes === c.mes ? `el ${a.dia} y el ${c.dia} de ${MESES[c.mes]}` : `el ${fechaLarga(ve.abre)} y el ${fechaLarga(ve.cierra)}`;
+      return a.mes === c.mes ? `el ${a.dia} y el ${c.dia} de ${MESES[c.mes]}` : `el ${fechaLarga(ve.abre)} y el ${fechaLarga(ve.fase === "extra" ? ve.extension : ve.cierra)}`;
     }
 
     function avancePorNivel(prog) {
@@ -3270,7 +3279,10 @@ window.qrcode=qrcode;
       const estudio = ESTUDIO_EDI[prog.edi ? prog.cohorte : null];
       const duracion = estudio ? "Toma unos 20 minutos" : "Solo toma unos minutos";
       const parrafoEdi = estudio ? `\n\nNuestro colegio forma parte del Estudio de Impacto del programa. ${estudio}, por eso tu opinión es tan valiosa. Te pido, por favor, que la respondas con calma y a conciencia.` : "";
-      return `Estimado/a,\n\n${entre ? `Entre ${entre} estará disponible` : "Estará disponible"} la Encuesta de Fin de Año del ${programa}. ${duracion} y tu participación es muy importante para nuestra comunidad.${parrafoEdi}${parrafoEdi ? "\n\n" : " "}Puedes responderla ${links.length === 1 ? "aquí" : "en el link que te corresponde"}:\n${lista}${verifica}\n\n¡Muchas gracias!`;
+      const apertura = ve.fase === "extra"
+        ? `La Encuesta de Fin de Año del ${programa} tiene una semana extra: estará disponible hasta el ${fechaConDia(ve.extension)}. Si aún no la has respondido, este es el momento.`
+        : `${entre ? `Entre ${entre} estará disponible` : "Estará disponible"} la Encuesta de Fin de Año del ${programa}.`;
+      return `Estimado/a,\n\n${apertura} ${duracion} y tu participación es muy importante para nuestra comunidad.${parrafoEdi}${parrafoEdi ? "\n\n" : " "}Puedes responderla ${links.length === 1 ? "aquí" : "en el link que te corresponde"}:\n${lista}${verifica}\n\n¡Muchas gracias!`;
     }
 
     // QR from the kept qrcode library, drawn on a canvas (crisp at any size).
@@ -3740,7 +3752,7 @@ window.qrcode=qrcode;
         const [programa, clave] = msgBtn.dataset.copiarMensaje.split("|");
         const prog = (estado.datos.programas || []).find(p => p.programa === programa);
         const ve = estado.datos.encuestas[clave];
-        const texto = mensajeCompartir(prog, clave, linksVisibles(prog, clave), clave === "test" && ve && ve.fase === "open" && shDe(programa, clave).incluir);
+        const texto = mensajeCompartir(prog, clave, linksVisibles(prog, clave), clave === "test" && abierta(ve) && shDe(programa, clave).incluir);
         return copiarTexto(texto, msgBtn, "Mensaje copiado");
       }
       const sw = ev.target.closest("[data-incluir]");

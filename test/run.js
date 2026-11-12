@@ -112,6 +112,19 @@ check('contacto general', r.contacto === 'evaluacion@fundaciontrabun.cl');
   check('aviso_portal: blank by default, trimmed text when set', r.aviso === '' && conAviso.aviso === 'Aviso de prueba.\nSegunda línea.');
 }
 check('phases computed (Config dates as Date and dd-mm-yyyy)', r.encuestas.test.abre === '2026-10-01' && r.encuestas.efa.abre === '2026-11-02' && r.encuestas.efa.fase !== null);
+check('extra week: open until cierra, then "extra" with days to the extension, then closed; cierra unchanged', (() => {
+  const v = hoy => ctx.ventana_('02-11-2026', '13-11-2026', hoy, new Date(2026, 10, 20));
+  const a = v('2026-11-13'), b = v('2026-11-16'), c = v('2026-11-20'), e = v('2026-11-21');
+  return a.fase === 'open' && a.diasRestantes === 0 && a.extension === '2026-11-20'
+    && b.fase === 'extra' && b.diasRestantes === 4 && b.cierra === '2026-11-13'
+    && c.fase === 'extra' && c.diasRestantes === 0 && e.fase === 'closed' && e.diasRestantes === null; })());
+check('extra week ignored when blank or not after cierra (no extension key)', (() => {
+  const a = ctx.ventana_('02-11-2026', '13-11-2026', '2026-11-16', ''), b = ctx.ventana_('02-11-2026', '13-11-2026', '2026-11-16', '13-11-2026');
+  return a.fase === 'closed' && !('extension' in a) && b.fase === 'closed' && !('extension' in b) && !('extension' in r.encuestas.efa); })());
+check('efa_extension in Config reaches the panel', (() => {
+  const d = ctx.cargarDatos_();
+  const p = ctx.panel_('11111', Object.assign({}, d, { cfg: Object.assign({}, d.cfg, { efa_extension: new Date(2026, 10, 20) }) }), ctx.reloj_());
+  return p.encuestas.efa.extension === '2026-11-20' && !('extension' in p.encuestas.test); })());
 const ase = r.programas.find(p=>p.programa==='ase'), rel = r.programas.find(p=>p.programa==='rel');
 check('ASE test grades from Formularios ∩ implemented', JSON.stringify(ase.test.nivelesTest) === JSON.stringify(['4° básico','5° básico','6° básico','7° básico','8° básico','I° medio','II° medio','III° medio','IV° medio']));
 check('ASE test links (2, non-EDI)', ase.test.links.map(l=>l.form).join() === 'ASE_4-5,ASE_6-IV');

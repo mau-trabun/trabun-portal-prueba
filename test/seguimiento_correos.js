@@ -66,3 +66,8 @@ reset(); sheets.Destinatarios = estado.concat([['RBD', 'Colegio']]);
 check('Destinatarios without its columns → clear error, no drafts', (() => { try { ctx.generarBorradoresAvance(['11111|ASE']); return false; } catch (e) { return /columnas esperadas/.test(e.message) && borradores.length === 0; } })());
 reset(); delete sheets.Resumen;
 check('missing Resumen → clear error', (() => { try { ctx.generarBorradoresAvance(['11111|ASE + REL']); return false; } catch (e) { return /Falta la pestaña «Resumen»/.test(e.message); } })());
+reset(); sheets.Destinatarios[4][9] = '2026-11-20'; sheets.Destinatarios[4][10] = 'extra';
+ctx.generarBorradoresAvance(['22222|ASE']);
+check('extra week: says so with the real closing date, still asks to remind', borradores.length === 1
+  && borradores[0].body.includes('La encuesta tiene una semana extra: sigue abierta hasta el') && /20 de noviembre/.test(borradores[0].body)
+  && borradores[0].body.includes('les pido recordárselo') === false && /recordárselo/.test(borradores[0].body) && /semana extra hasta el/.test(borradores[0].o.htmlBody));

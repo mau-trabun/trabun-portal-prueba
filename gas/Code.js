@@ -390,8 +390,8 @@ function panel_(rbd, d, reloj) {
     aviso: String(cfg.aviso_portal == null ? '' : cfg.aviso_portal).trim(), // Config notice for every school ('' = none)
     studentId,
     encuestas: {
-      test: ventana_(cfg.test_abre, cfg.test_cierra, reloj.hoy),
-      efa: ventana_(cfg.efa_abre, cfg.efa_cierra, reloj.hoy),
+      test: ventana_(cfg.test_abre, cfg.test_cierra, reloj.hoy, cfg.test_extension),
+      efa: ventana_(cfg.efa_abre, cfg.efa_cierra, reloj.hoy, cfg.efa_extension),
     },
     programas: ['ase', 'rel'].filter(p => col.programas[p])
       .map(p => panelPrograma_(rbd, col.programas[p], d, studentId)),
@@ -647,12 +647,19 @@ function rolEfa_(rol) {
   return { secciones: ['lideres'], corto: rol ? rol.split(',')[0].trim() : null };
 }
 
-function ventana_(abreRaw, cierraRaw, hoy) {
+// Optional extra week (Config `<encuesta>_extension`, Mau 12-11-2026): the closing date stays what schools were told
+// (`cierra`); between the day after it and `extension` the survey is in phase 'extra' (still open, shown as an extra
+// week, days left counted to `extension`); after it, closed. An extension not after `cierra` is ignored.
+function ventana_(abreRaw, cierraRaw, hoy, extensionRaw) {
   const abre = fechaIso_(abreRaw);
   const cierra = fechaIso_(cierraRaw);
   if (!abre || !cierra) return { abre, cierra, fase: null, diasRestantes: null };
-  const fase = hoy < abre ? 'pre' : hoy > cierra ? 'closed' : 'open';
-  return { abre, cierra, fase, diasRestantes: fase === 'open' ? diasEntre_(hoy, cierra) : null };
+  const ext = fechaIso_(extensionRaw);
+  const extension = ext && ext > cierra ? ext : null;
+  const fase = hoy < abre ? 'pre' : hoy <= cierra ? 'open' : extension && hoy <= extension ? 'extra' : 'closed';
+  const v = { abre, cierra, fase, diasRestantes: fase === 'open' ? diasEntre_(hoy, cierra) : fase === 'extra' ? diasEntre_(hoy, extension) : null };
+  if (extension) v.extension = extension;
+  return v;
 }
 
 function registrarMetrica_(res, interno) {
@@ -1187,7 +1194,9 @@ function seguimientoEfa_(d, s, reloj) {
   // (gas-seguimiento/: Seguimiento → Generar correos de avance), which builds the email when the JdP clicks, with the
   // numbers of Resumen at that moment. One row per school and JdP (programs with different JdPs → one row each).
   if (s.encargados) {
-    const v = ventana_((d.cfg || {}).efa_abre, (d.cfg || {}).efa_cierra, reloj.hoy);
+    const v = ventana_((d.cfg || {}).efa_abre, (d.cfg || {}).efa_cierra, reloj.hoy, (d.cfg || {}).efa_extension);
+    // Cierre EFA = the date the survey really closes once the extra week has started (the drafts say "hasta el …")
+    const cierreDest = v.extension && v.fase !== 'pre' && v.fase !== 'open' ? v.extension : v.cierra;
     const dest = [tab[0], tab[1], SEG_EFA_DEST]; // same status lines; header on row 3
     const porColegioJdp = agrupar_(filas, f => f.rbd + '|' + (f.sp.jefeProyecto || ''));
     Object.keys(porColegioJdp).forEach(k => {
@@ -1201,7 +1210,7 @@ function seguimientoEfa_(d, s, reloj) {
         !enc.length ? `Sin encargado en la pestaña ${TAB_ENCARGADOS}` : '', !s.claves[f0.rbd] ? 'Sin clave en Contraseñas' : ''].filter(Boolean);
       dest.push([Number(f0.rbd), f0.col.nombre || '', grupo.map(f => prog(f.p)).join(' + '), jdp, correoJdp,
         enc.map(e => e.email).join(', '), enc.map(e => e.nombre).filter(Boolean).join(', '), cc.join(', '), s.claves[f0.rbd] || '',
-        v.cierra || '', v.fase || '', obs.join(' · ')]);
+        cierreDest || '', v.fase || '', obs.join(' · ')]);
     });
     tabs[SEG_EFA_DEST_TAB] = dest;
     notasT[SEG_EFA_DEST_TAB] = [];
@@ -2264,6 +2273,7 @@ function seedRows_() {
       ['test_cierra', new Date(2026, 10, 20), 'Cierre del Test de Estudiantes (abierta todo ese día)'],
       ['efa_abre', new Date(2026, 10, 2), 'Apertura de la EFA'],
       ['efa_cierra', new Date(2026, 10, 13), 'Cierre de la EFA (abierta todo ese día; probable extensión al 20-11)'],
+      ['efa_extension', '', 'Semana extra de la EFA (fecha; vacío = sin extensión): el portal sigue mostrando efa_cierra'],
       ['student_id', '', 'nombre | numero (pendiente)'],
       ['contacto_general', 'evaluacion@fundaciontrabun.cl', 'Contacto en el pie de página'],
       ['contacto_edi', 'consultas_edi@fundaciontrabun.cl', 'Contacto para colegios EDI'],
