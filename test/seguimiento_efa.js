@@ -308,7 +308,7 @@ check('Destinatarios «Ajustes internos» = SÍ only where someone counts in a r
   const flag = D => D.find(x => x[0] === 22222)[D[2].indexOf('Ajustes internos')];
   return flag(sin) === '' && flag(con) === 'SÍ' && con.find(x => x[0] === 11111)[con[2].indexOf('Ajustes internos')] === '';
 })());
-check('EFA-EDI: no role → SF roles; one of several SF leader roles → all of them; a leader role SF does not give them stays as picked; teacher of an EDI grade → also leader (not outside EDI grades); consents table unchanged', (() => {
+check('EFA-EDI: no role → SF roles; a leader response → their SF leader roles instead of the one picked (Mover); teacher of an EDI grade → also leader (not outside EDI grades); consents table unchanged', (() => {
   const nC = sheets['Contactos EFA'].length, nR = sheets['Respuestas EFA'].length;
   sheets['Contactos EFA'].push(contacto(FARO, 'ASE', 'Docente', 'na@ejemplo.cl'), contacto(FARO, 'ASE', 'Director/a', 'ed@ejemplo.cl'),
     contacto(FARO, 'ASE', 'Docente y Mentor/a', 'vn@ejemplo.cl'), contacto(FARO, 'ASE', 'Docente y Mentor/a', 'un@ejemplo.cl'),
@@ -320,7 +320,7 @@ check('EFA-EDI: no role → SF roles; one of several SF leader roles → all of 
   const n = c => (o.notas['Resumen'].find(([fl, j]) => fl === fila && hh[j] === c) || [])[2] || '';
   const neg = t => { const P = t.tabs['Por programa'], i = P.findIndex(x => /consentimientos por cohorte/.test(x[1] || '')); // negative consents only
     return i >= 0 && P.slice(i + 2).filter(x => /EDI/.test(x[1] || '')).map(x => x[4]).join('|'); };
-  return v('Docentes resp.') === f['Docentes resp.'] + 1 && v('Director/a resp.') === f['Director/a resp.'] && v('Otros líderes resp.') === f['Otros líderes resp.'] // ed: picked Equipo Directivo, SF Director/a → as picked
+  return v('Docentes resp.') === f['Docentes resp.'] + 1 && v('Director/a resp.') === f['Director/a resp.'] + 1 && v('Otros líderes resp.') === f['Otros líderes resp.'] - 1 // ed: picked Equipo Directivo, SF Director/a → moved
     && v('Encargado/a resp.') === f['Encargado/a resp.'] + 1
     && v('Mentor/a resp.') === f['Mentor/a resp.'] + 2 // em (answered Encargado, SF also Mentor/a); vn (5° and 6°: EDI grades of cohort 2025) yes, un (4° only) no
     && /1 respuesta sin rol cuenta según el rol de la persona en Salesforce/.test(n('Respuestas')) && !/sin rol: cuenta en Respuestas totales/.test(n('Respuestas'))

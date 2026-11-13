@@ -858,7 +858,7 @@ function seguimiento_(d, s, reloj) {
 
 // ── Seguimiento EFA (team tracker for the EFA; Cloud Run writes it to its own Sheet, SEGUIMIENTO_EFA_ID) ─
 // One row per school-program with EFA: what each person answered (the portal's responses, by role) against what
-// Salesforce has (contacts per role, refreshed daily: if a number doesn't fit, it is fixed in SF, never here).
+// Salesforce has (contacts per role, refreshed every 4 hours: if a number doesn't fit, it is fixed in SF, never here).
 // Counts only, never names or emails.
 
 const SEG_EFA_TAB = 'Resumen';
@@ -866,7 +866,7 @@ const SEG_EFA_JDP = 'Por JdP', SEG_EFA_PROG = 'Por programa';
 const SEG_EFA_DEST_TAB = 'Destinatarios'; // recipients + clave per school and JdP, read by gas-seguimiento/
 const SEG_EFA_DEST = ['RBD', 'Colegio', 'Programas', 'Jefe/a de Proyecto', 'Correo JdP', 'Para', 'Nombres', 'CC', 'Clave', 'Cierre EFA', 'Fase EFA', 'Ajustes internos', 'Observaciones']; // sums of Resumen rows (2025 tracker's Resumen JdP / Resumen Programa)
 const SEG_EFA_SUMA = ['Implementaciones', 'Impl. con al menos 1 respuesta', 'Respuestas'];
-// SF report "Contactos EFA '26 (seguimiento)" through the Salesforce connector (daily). Cloud Run downloads only these
+// SF report "Contactos EFA '26 (seguimiento)" through the Salesforce connector (every 4 hours). Cloud Run downloads only these
 // columns: Email only to spot repeated contacts, never written. SF labels the role field "Implementacióon" (typo).
 const TAB_CONTACTOS_EFA = 'Contactos EFA';
 const COLS_CONTACTOS_EFA = ['Nombre para formulario', 'Implementación: Record Type', 'Rol en la Implementacióon', 'Rol en la Implementación', 'Email',
@@ -1025,7 +1025,7 @@ function seguimientoEfa_(d, s, reloj) {
     fuera.sf && pl(fuera.sf, 'respuesta de un RBD que no está en SF (pruebas incluidas)', 'respuestas de RBD que no están en SF (pruebas incluidas)'),
     fuera.programa && pl(fuera.programa, 'respuesta de un programa que el colegio no tiene en SF', 'respuestas de programas que el colegio no tiene en SF')].filter(Boolean);
   nota(2, col('Ingresos desde la apertura'), [`Ingresos al portal${abre ? ' desde el ' + ddmm(abre) : ''}, en cualquier pestaña. Las vistas internas no cuentan.`]);
-  nota(2, col(SEG_COL_CONTACTOS), [s.contactos ? 'Contactos vigentes de la implementación en el reporte de Salesforce («Contactos EFA \'26 (seguimiento)», actualización diaria), tal como están. '
+  nota(2, col(SEG_COL_CONTACTOS), [s.contactos ? 'Contactos vigentes de la implementación en el reporte de Salesforce («Contactos EFA \'26 (seguimiento)», que el seguimiento lee cada 4 horas), tal como están. '
     + 'No es el total esperado: los esperados por rol incluyen ajustes (1 automático en Director/a y Encargado/a, 0 en Encargado/a y Mentor/a de REL Cuadernillos, y ajustes acordados para algunos colegios en la pestaña ' + TAB_AJUSTES_EFA + ', cada uno con su comentario) y un contacto con varios roles cuenta en cada uno. '
     + 'Si un número no calza, corrígelo en Salesforce.'
     : `Falta la pestaña ${TAB_CONTACTOS_EFA} en la planilla: sin esperados.`,
@@ -1044,7 +1044,7 @@ function seguimientoEfa_(d, s, reloj) {
   // Roles counted from SF (Mau 12-11-2026, CONTRACT.md §1): a response is matched to its SF contact in the same
   // school-program (email; else first name + first surname, one person only). Regular programs: someone with several
   // roles answers once (with the highest one), so a response in one of their SF roles counts in all of them. EFA-EDI:
-  // leaders all get the same questions, so a leader response in one of their SF leader roles counts in all of them;
+  // leaders all get the same questions, so a leader response counts in their SF leader roles instead of the one picked;
   // a leader who teaches an EDI grade answers as a teacher, so that response counts in their leader roles too; and a
   // response without a role counts in their SF roles. A person counts once per role.
   const LIDERES = ['director', 'encargado', 'mentor', 'otros'];
@@ -1070,9 +1070,9 @@ function seguimientoEfa_(d, s, reloj) {
       const lid = sf.filter(k => LIDERES.indexOf(k) >= 0);
       if (!edi) return d.some(k => sf.indexOf(k) >= 0) ? union(d, sf) : d;
       if (!d.length) return sf;
-      // Several leader roles, answered with one of them → all of them. A leader role SF doesn't give them stays as picked
-      // (Mau 12-11-2026: whether to add or move those is pending; today = as picked, nothing taken away)
-      if (d.some(k => LIDERES.indexOf(k) >= 0)) return d.some(k => lid.indexOf(k) >= 0) ? union(d, lid) : d;
+      // A leader response counts in the person's SF leader roles instead of the one picked ("Mover", Mau 13-11-2026,
+      // agreed with the subdirecciones: every leader gets the same questions, so the label picked carries no weight)
+      if (d.some(k => LIDERES.indexOf(k) >= 0)) return lid.length ? union(d.filter(k => LIDERES.indexOf(k) < 0), lid) : d;
       return lid.length && x.niveles.some(i => papel.indexOf(i) >= 0) ? union(d, lid) : d;
     };
     const r = {}, e = {}, eSf = {}, porSf = {};
