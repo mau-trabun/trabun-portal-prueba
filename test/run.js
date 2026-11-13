@@ -191,6 +191,10 @@ check('REL docentes carry declared grades', JSON.stringify(rel.efa.secciones[2].
 check('declared grades: regular "NT1, 5° básico" and EDI "NT1: A, B | 1° básico: A, B" (classes ignored, no repeats)',
   JSON.stringify(ctx.nivelesDeTexto_('NT1, 5° básico')) === '[0,6]' && JSON.stringify(ctx.nivelesDeTexto_('NT1: A, B | NT2: A, B | 1° básico: A, B | 2° básico: A')) === '[0,1,2,3]'
   && ctx.nivelesDeTexto_('-').length === 0 && ctx.nivelesDeTexto_('').length === 0 && JSON.stringify(ctx.nivelesDeTexto_('I° medio: A | I° medio: B')) === '[10]');
+check('declared grades: EDI matrix rows answered "-" are not declared',
+  JSON.stringify(ctx.nivelesDeTexto_('NT1: A | NT2: - | 1° básico: - | 2° básico: - | 3° básico: - | 4° básico: - | 5° básico: - | 6° básico: - | 7° básico: - | 8° básico: - | I° medio: - | II° medio: - | III° medio: - | IV° medio: -')) === '[0]'
+  && JSON.stringify(ctx.nivelesDeTexto_('NT1: - | NT2: A | 3° básico: A, C')) === '[1,4]'
+  && ctx.nivelesDeTexto_('NT1: - | NT2: -  | 1° básico:').length === 0);
 check('REL docentes flat list', Array.isArray(rel.efa.secciones[2].personas) && !rel.efa.secciones[2].niveles);
 check('2026 EFA role options → section + short label (REL, ASE, EDI wordings; leading "Soy" ignored; unknown → Líderes)', [
   ['Director/a del establecimiento', 'direccion', 'Director/a'],

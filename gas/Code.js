@@ -353,13 +353,16 @@ function leerRespuestasEfa_(formularios) {
     .filter(x => x.rbd);
 }
 
-// Grades a respondent declared. Regular surveys: "NT1, 5° básico". EDI surveys add the classes:
-// "NT1: A, B | 1° básico: A, B" → the grade is the text before ":" (letters are ignored; they fail the exact match).
+// Grades a respondent declared. Regular surveys: "NT1, 5° básico". EDI surveys are a grade × class matrix
+// that writes every row: "NT1: A, B | NT2: - | 1° básico: A" → a grade counts only when something other
+// than "-" follows its ":" (Mau 13-11-2026: "NT2: -" was read as declared). Letters are not kept.
 function nivelesDeTexto_(v) {
   const out = [];
-  String(v == null ? '' : v).split(/[|,]/).forEach(t => {
-    const i = nivelIdx_(t.split(':')[0]);
-    if (i >= 0 && out.indexOf(i) < 0) out.push(i);
+  const agregar = t => { const i = nivelIdx_(t); if (i >= 0 && out.indexOf(i) < 0) out.push(i); };
+  String(v == null ? '' : v).split('|').forEach(parte => {
+    const k = parte.indexOf(':');
+    if (k < 0) { parte.split(',').forEach(agregar); return; }
+    if (/[^\s\-–—,;]/.test(parte.slice(k + 1))) agregar(parte.slice(0, k));
   });
   return out;
 }
