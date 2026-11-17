@@ -163,4 +163,67 @@ check('EFA: "the same we sent you" only if every recipient got the Test email (a
   return cambio.includes('Entren al portal con estos datos:') && !cambio.includes('les enviamos el') && !cambio.includes('el mismo del Test')
     && filaEfa('11111').Mensaje.includes('les enviamos el 9 de octubre'); })());
 
+
+// ── EFA-EDI reminder to each pending person (prepararCorreosFaltan, enviarCorreoPruebaFaltan, enviarCorreosFaltan) ─
+{
+  const cfg = k => sheets['Config'].find(r => r[0] === k);
+  const antes = [cfg('efa_abre')[1], cfg('efa_cierra')[1]];
+  cfg('efa_abre')[1] = '01-01-2020'; cfg('efa_cierra')[1] = '31-12-2099'; // open whatever the run date
+  const cont = (nombre, apellido, rol, email, rut) => [FARO, 'x', 'ASE', 'Intensivo', true, 2025, 'x', nombre, apellido, rol, email, true, '[]', rut];
+  sheets['Contactos EFA-EDI'] = [['Nombre para formulario', 'Account Name', 'Implementación: Record Type', 'Implementación: Modelo', 'Implementación: EDI',
+    'Año inicio ASE', 'Implementación: Nombre de la Implementación', 'First Name', 'Last Name', 'Rol en la Implementacióon', 'Email', 'Vigente 2026', 'Rol en el colegio', 'RUT'],
+    cont('Ana', 'Pérez', 'Director/a', 'ana@ejemplo.invalid', '12.345.678-5'),
+    cont('Ramón', 'Tapia', 'Docente', 'ramon@ejemplo.invalid', '22.222.222-2'),
+    cont('Gloria', 'Tapia', 'Docente', 'gloria@ejemplo.invalid', '22.222.222-2'),   // same RUT in SF, another person
+    cont('Dora', 'Villal', 'Mentor/a', 'dora.villaal@ejemplo.invalid', ''),        // typo of the SDC address
+    cont('Inés', 'Montt', 'Docente', 'ines@ejemplo.invalid', '33.333.333-3'),
+    cont('INÉS', 'Montt', 'Docente', 'berta@ejemplo.invalid', ''),             // joined only by name, another address
+    cont('Otro', 'Lider', 'Otro', 'otro@ejemplo.invalid', '44.444.444-4'),
+    cont('Otro', 'Lider', 'Otro', 'otro2@ejemplo.invalid', '44.444.444-4')];          // same person by RUT, two addresses
+  sheets['SDC'] = [['RBD', 'Nombre', 'Apellido', 'Correo', 'Nivel', 'Letra', 'Nivel EDI', 'Cohorte'],
+    [22222, 'Gloria', 'Tapia', 'gloria@ejemplo.invalid', '5° básico', 'A', true, 1],
+    [22222, 'Dora', 'Villal', 'dora.villal@ejemplo.invalid', '6° básico', 'A', true, 1],
+    [22222, 'Inés', 'Montt', 'ines@ejemplo.invalid', '7° básico', 'A', true, 1],
+    [22222, 'Carla', 'Núñez', '', '7° básico', 'B', true, 1],                        // no address
+    [22222, 'Tomás', 'Díaz', 'tomas@ejemplo.invalid', '8° básico', 'A', true, 1]];   // answered
+  const n0 = sheets['Respuestas EFA'].length;
+  sheets['Respuestas EFA'].push(['EFA_EDI', '2026-11-05T10:00:00', 'Tomás', 'Díaz', 'tomas@ejemplo.invalid', FARO, 'Soy Docente e implemento el Programa', '8° básico']);
+  logs.length = 0; enviados = [];
+  const informe = ctx.prepararCorreosFaltan();
+  const tab = () => sheets['Correos Faltan'];
+  const persona = n => { const t = tab(); const r = t.find(x => x[2] === n); return r && Object.fromEntries(t[0].map((k, i) => [k, r[i]])); };
+  check('faltan: one row per pending person, contract header, answered and non-EDI-grade people left out', tab()[0].join('|') === 'RBD|Colegio|Persona|Rol|Para|No se envía a|Asunto|Mensaje|Observaciones|Enviar|Enviado'
+    && lastRow('Correos Faltan') === 7 && !persona('Tomás Díaz') && !persona('Ramón Tapia') && /6 personas · 5 por enviar \\(1 colegios\\)/.test(informe));
+  check('faltan: one RUT with two first names stays two people (the second one listed on her own)', persona('Gloria Tapia').Para === 'gloria@ejemplo.invalid' && persona('Gloria Tapia').Rol === 'Docente · 5° básico A');
+  check('faltan: two addresses together only when sure (RUT, or a near copy); another one joined by name is held back', persona('Otro Lider').Para === 'otro@ejemplo.invalid, otro2@ejemplo.invalid'
+    && persona('Dora Villal').Para === 'dora.villaal@ejemplo.invalid, dora.villal@ejemplo.invalid' && persona('Dora Villal').Rol === 'Mentor/a'
+    && persona('Inés Montt').Para === 'ines@ejemplo.invalid' && persona('Inés Montt')['No se envía a'] === 'berta@ejemplo.invalid' && /unido solo por nombre/.test(persona('Inés Montt').Observaciones));
+  check('faltan: no address → unticked, flagged', persona('Carla Núñez').Enviar === false && persona('Carla Núñez').Observaciones === 'Sin correo' && persona('Ana Pérez').Enviar === true);
+  check('faltan: short, warm usted text: first name, deadline from Config, school link, study line by cohort, "si ya la respondió", signed Mauricio; school in the subject', (() => {
+    const m = persona('Dora Villal').Mensaje;
+    return /^Hola, Dora:\\n\\nLe escribo porque aún no hemos recibido su respuesta a la Encuesta de Fin de Año del programa de Aprendizaje Socioemocional\\. /.test(m)
+      && /La encuesta está abierta hasta el .+ y toma unos 20 minutos:\\nhttps:/.test(m) && m.includes('?rbd=22222')
+      && m.includes('Su colegio forma parte del Estudio de Impacto del programa y esta encuesta es el último hito del estudio, por eso su opinión es tan valiosa para nosotros.')
+      && m.includes('Si ya la respondió, ¡muchas gracias! Solo respóndame este correo y lo reviso.') && !/\\b(tu|te|ti|respondiste|respóndeme)\\b/i.test(m)
+      && /Un abrazo,\\nMauricio\\nFundación Trabün$/.test(m) && persona('Dora Villal').Asunto === 'Encuesta de Fin de Año 2026 · Escuela El Faro'; })());
+  ctx.enviarCorreoPruebaFaltan();
+  check('faltan prueba: only to whoever runs it, as «Mauricio de Trabün», [PRUEBA], a leader, a teacher and a two-address sample', enviados.length === 3
+    && enviados.every(e => e.to === 'yo@ejemplo.invalid' && e.name === 'Mauricio de Trabün' && /^\\[PRUEBA\\] /.test(e.subject) && !e.replyTo && !e.cc)
+    && enviados.some(e => e.htmlBody.includes('Correo de prueba') && e.htmlBody.includes('dora.villaal@ejemplo.invalid, dora.villal@ejemplo.invalid')) && !tab().slice(1).some(r => r[10]));
+  enviados = [];
+  sheets['Respuestas EFA'].push(['EFA_EDI', '2026-11-06T10:00:00', 'Ana', 'Pérez', 'ana@ejemplo.invalid', FARO, 'Director/a', '-']); // answers before the send
+  const r = ctx.enviarCorreosFaltan();
+  const a = enviados.find(e => e.to === 'dora.villaal@ejemplo.invalid,dora.villal@ejemplo.invalid');
+  check('faltan send: one email per person (addresses together), name «Mauricio de Trabün», no reply-to; whoever answered meanwhile skipped', enviados.length === 4
+    && a && a.name === 'Mauricio de Trabün' && !a.replyTo && a.htmlBody.includes('>Responder la encuesta</a>') && a.htmlBody.includes('<a href="https://es.') === false && /href="[^"]*\\?rbd=22222[^"]*"[^>]*>Responder la encuesta/.test(a.htmlBody) && a.htmlBody.includes('href="https://portal.fundaciontrabun.cl/e/?22222-EFA-EDI"') && a.htmlBody.includes('>portal.fundaciontrabun.cl/e/?22222-EFA-EDI</a>') && ['banner', 'ola', 'isotipo'].every(k => a.htmlBody.includes('src="cid:' + k + '"') && a.inlineImages[k].type === 'image/png' && a.inlineImages[k].bytes.length > 1000) && !a.htmlBody.includes('<!--prueba-->')
+    && !enviados.some(e => /ana@/.test(e.to)) && /Enviados: 4\\. 1 ya respondieron/.test(r) && persona('Ana Pérez').Observaciones === 'Respondió antes del envío: no se envió');
+  check('faltan send: Enviado stamped; re-run sends nothing; rebuild keeps who got it and marks who answered', persona('Dora Villal').Enviado instanceof Date
+    && (() => { enviados = []; ctx.enviarCorreosFaltan(); return enviados.length === 0; })()
+    && (() => { ctx.prepararCorreosFaltan(); return persona('Dora Villal').Enviado instanceof Date && !persona('Ana Pérez') && lastRow('Correos Faltan') === 6; })());
+  check('faltan: no emails or names in logs; near-copy rule', !/@ejemplo\\.invalid|Dora|Montt/.test(logs.join('\\n'))
+    && ctx.casiIgual_('a.b@x.cl', 'a.b@xc.l') && ctx.casiIgual_('dora.villaal@x.cl', 'dora.villal@x.cl') && !ctx.casiIgual_('ines@x.cl', 'berta@x.cl'));
+  sheets['Respuestas EFA'].length = n0; delete sheets['Contactos EFA-EDI']; delete sheets['SDC']; delete sheets['Correos Faltan'];
+  cfg('efa_abre')[1] = antes[0]; cfg('efa_cierra')[1] = antes[1];
+}
+
 `);
