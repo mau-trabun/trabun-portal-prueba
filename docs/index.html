@@ -212,20 +212,34 @@
     .docentes-lista{padding:0 14px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:24px}
     .docentes-lista .persona{padding:5px 0}
     .efa-nota{font-size:12px;color:var(--muted)}
-    /* EDI «Faltan por responder» (Mau 17-11-2026): pending people first, in a neutral dashed box (no program color,
-       no red), then «Ya respondieron» with what every school sees */
+    /* EDI «Faltan por responder» (Mau 17-11-2026): pending people first, in a soft tray box (no red; program color only
+       on the class-letter badges), then «Ya respondieron» with what every school sees */
     .efa-bloque + .efa-bloque{margin-top:22px}
     .efa-bloque-cab{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-bottom:4px}
     .efa-bloque-cab h3{font-family:var(--f-head);font-weight:800;font-size:17px;margin:0}
-    .efa-bloque.faltan{border:1.5px dashed #c9ccd3;border-radius:14px;padding:16px 18px}
-    .efa-bloque-nota{font-size:13px;color:var(--muted);margin:0 0 10px}
-    .faltan .seccion{padding-top:12px}
-    .faltan .seccion + .seccion{margin-top:12px}
-    .faltan-nivel{font-family:var(--f-head);font-weight:700;font-size:12.5px;color:var(--muted-2);margin:8px 0 0}
-    .faltan-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:24px}
-    .faltan-lista .persona{padding:5px 0}
-    .faltan-ayuda{border-top:1px solid var(--borde);margin-top:14px;padding-top:10px;font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+    .efa-bloque.faltan{background:var(--tray);border:1px solid var(--borde);border-radius:14px;padding:16px 18px}
+    .efa-bloque-nota{font-size:13px;color:var(--muted);margin:0 0 12px}
+    /* Each group = white card: header (title + count) and one row per person (leaders) or per grade (teachers) */
+    .faltan-grupo{background:#fff;border:1px solid var(--borde);border-radius:12px;overflow:hidden}
+    .faltan-grupo + .faltan-grupo{margin-top:12px}
+    .faltan-grupo-cab{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 14px;background:#fafafb}
+    .faltan-grupo-cab b{font-family:var(--f-head);font-weight:700;font-size:15px}
+    .faltan-fila{display:flex;align-items:baseline;gap:6px 16px;padding:10px 14px;border-top:1px solid var(--borde)}
+    .faltan-fila .nombre{flex:1;min-width:0;font-family:var(--f-head);font-weight:600;font-size:14px;overflow-wrap:anywhere}
+    .faltan-fila .rol{flex:none;font-size:12.5px;color:var(--muted);text-align:right}
+    .faltan-fila .grado{flex:none;width:96px;font-family:var(--f-head);font-weight:800;font-size:13px}
+    .faltan-personas{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:6px 22px}
+    .faltan-personas .nombre{flex:none;display:inline-flex;align-items:baseline;gap:6px;max-width:100%}
+    .letra{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:6px;
+      border:1.5px solid var(--prog);font-family:var(--f-head);font-weight:800;font-size:11.5px;line-height:1;color:var(--tinta);align-self:center}
+    .faltan-ayuda{margin-top:12px;font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
     .faltan-listo{font-size:14px;margin:4px 0 0}
+    @media (max-width:600px){
+      .efa-bloque.faltan{padding:14px 12px}
+      .faltan-fila{flex-direction:column;gap:4px}
+      .faltan-fila .rol{text-align:left}
+      .faltan-fila .grado{width:auto}
+    }
     .nota-cursos{margin:2px 14px 12px;background:var(--papel);border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.45;color:var(--muted-2)}
 
     /* ── COMPARTIR (sección siempre visible + QR) ───────── */
@@ -3618,26 +3632,22 @@ window.qrcode=qrcode;
     // EDI «Faltan por responder» (Mau 17-11-2026): expected people (SF leaders + teachers of EDI grades in the SdC)
     // who don't appear among the responses yet. The backend sends names only; who answered stays as every school sees it.
     function bloqueFaltan(pend) {
-      const cab = `<div class="efa-bloque-cab"><h3>Faltan por responder</h3>${pend.total ? `<span class="seccion-pill">${plural(pend.total, "persona", "personas")}</span>` : ""}</div>`;
+      const pill = n => `<span class="seccion-pill"><span class="punto"></span>${plural(n, "persona", "personas")}</span>`;
+      const cab = `<div class="efa-bloque-cab"><h3>Faltan por responder</h3>${pend.total ? pill(pend.total) : ""}</div>`;
       if (!pend.total) return cab + `<p class="faltan-listo">Ya respondieron todas las personas que esperábamos. ¡Muchas gracias!</p>`;
-      const persona = (nombre, detalle) => {
-        const n = formatNombre(nombre);
-        return `<div class="persona"><b>${n ? esc(n) : "Sin nombre"}</b>${detalle ? `<span>${esc(detalle)}</span>` : ""}</div>`;
-      };
-      const lideres = (pend.lideres || []).length ? `<div class="seccion"><div class="seccion-cab"><b>Líderes</b></div>
-          <div class="faltan-lista">${pend.lideres.map(x => persona(x.nombre, x.rol)).join("")}</div></div>` : "";
-      const docentes = (pend.docentes || []).length ? `<div class="seccion"><div class="seccion-cab"><b>Docentes</b></div>
-          ${pend.docentes.map(g => `<div class="faltan-nivel">${esc(g.nivel)}</div>
-            <div class="faltan-lista">${g.personas.map(x => persona(x.nombre, (x.letras || []).length ? `${g.nivel} ${letrasConY(x.letras)}` : "")).join("")}</div>`).join("")}</div>` : "";
+      const nombre = s => { const n = formatNombre(s); return n ? esc(n) : "Sin nombre"; };
+      const grupo = (titulo, n, filas) => `<div class="faltan-grupo"><div class="faltan-grupo-cab"><b>${titulo}</b>${pill(n)}</div>${filas}</div>`;
+      const lideres = pend.lideres || [], docentes = pend.docentes || [];
+      // Leaders: one row each, name | role. Teachers: one row per EDI grade, each person with their class letters as badges
+      const filasLideres = lideres.map(x => `<div class="faltan-fila"><span class="nombre">${nombre(x.nombre)}</span>${x.rol ? `<span class="rol">${esc(x.rol)}</span>` : ""}</div>`).join("");
+      const nDocentes = new Set(docentes.flatMap(g => g.personas.map(x => x.nombre))).size;
+      const filasDocentes = docentes.map(g => `<div class="faltan-fila"><span class="grado">${esc(g.nivel)}</span><div class="faltan-personas">${g.personas.map(x =>
+        `<span class="nombre">${nombre(x.nombre)}${(x.letras || []).map(l => `<span class="letra" title="${esc(g.nivel)} ${esc(l)}">${esc(l)}</span>`).join("")}</span>`).join("")}</div></div>`).join("");
       const contacto = estado.datos.contacto || "consultas_edi@fundaciontrabun.cl";
       return cab + `<p class="efa-bloque-nota">Personas que esperamos en la encuesta y que todavía no aparecen entre las respuestas.</p>`
-        + lideres + docentes
+        + (lideres.length ? grupo("Líderes", lideres.length, filasLideres) : "")
+        + (docentes.length ? grupo("Docentes", nDocentes, filasDocentes) : "")
         + `<div class="faltan-ayuda">¿Alguien de esta lista ya respondió? Escríbenos a ${esc(contacto)} y lo revisamos.</div>`;
-    }
-
-    // "A", "A y B", "A, B y C"
-    function letrasConY(xs) {
-      return xs.length < 2 ? (xs[0] || "") : xs.slice(0, -1).join(", ") + " y " + xs[xs.length - 1];
     }
 
     // Course count from SF, only inside the open grade (as in EFS): context, never "1 de 3" (one teacher may cover every class)
