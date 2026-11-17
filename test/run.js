@@ -303,6 +303,81 @@ check('mistyped suffix ("11111tra", "11111 trabu") refused instead of counting a
     && met.length === n && post({rbd:'11111-K', clave:'aaa111', refresco:true}).ok === true && post({rbd:'11111-6', clave:'aaa111', refresco:true}).ok === true; })());
 check('internal view needs the right clave; other suffixes are not internal', post({rbd:'11111trabun', clave:'zzz'}).error === 'credenciales' && !post({rbd:'11111equipo', clave:'aaa111'}).interno);
 delete cacheStore['intentos_11111_interno'];
+// EDI «Faltan por responder» (Mau 17-11-2026): SF Contactos EFA-EDI (leaders) + SDC (EDI-grade teachers) − who answered
+{
+  const FARO = 'Puerto Inventado - Escuela El Faro - 22222';
+  const cont = (nombre, apellido, rol, email, rut, vigente = true) => [FARO, 'x', 'ASE', 'Intensivo', true, 2025, 'x', nombre, apellido, rol, email, vigente, '[]', rut];
+  sheets['Contactos EFA-EDI'] = [['Nombre para formulario', 'Account Name', 'Implementación: Record Type', 'Implementación: Modelo', 'Implementación: EDI',
+    'Año inicio ASE', 'Implementación: Nombre de la Implementación', 'First Name', 'Last Name', 'Rol en la Implementacióon', 'Email', 'Vigente 2026', 'Rol en el colegio', 'RUT'],
+    cont('Ana María', 'Pérez Soto', 'Director/a', 'ana@ejemplo.cl', '12.345.678-5'),
+    cont('Juan', 'Gallegos', 'Mentor/a', '', ''),
+    cont('Rosa', 'Castillo Vera', 'Mentor/a y Encargado/a', 'rosa@ejemplo.cl', '11111111-1'),
+    cont('Rosa', 'Castillo Vera', 'Mentor/a y Encargado/a', 'rosa@ejemplo.cl', ''),       // repeated SF row: one person
+    cont('Felipe', 'Araya', 'Otro', 'felipe@ejemplo.cl', ''),
+    cont('Luis', 'Herrera', 'Docente', 'luis@ejemplo.cl', ''),
+    cont('Marta', 'Lagos', 'Docente', 'marta@ejemplo.cl', ''),                          // not in an EDI grade: not expected
+    cont('Pedro', 'Soto', 'Docente', 'pedro@ejemplo.cl', ''),                           // SDC only outside EDI grades
+    cont('Sin', 'Rol', '', 'sinrol@ejemplo.cl', ''),                                    // no SF role: not expected
+    cont('Ex', 'Directora', 'Director/a', 'ex@ejemplo.cl', '', false),                  // not vigente
+    ['Villa Ficticia - Colegio Los Aromos - 11111', 'x', 'ASE', 'Semi-Intensivo', true, 2025, 'x', 'Otra', 'Escuela', 'Director/a', 'o@ejemplo.cl', true, '[]', ''],
+  ];
+  sheets['SDC'] = [['RBD', 'Nombre', 'Apellido', 'Correo', 'Nivel', 'Letra', 'Nivel EDI', 'Cohorte'],
+    [22222, 'Luis', 'Herrera', 'luis@ejemplo.cl', '5° básico', 'A', true, 1],
+    [22222, 'Luis', 'Herrera', 'luis@ejemplo.cl', '6° básico', 'B', true, 1],             // two EDI grades: listed in both, counted once
+    [22222, 'Rosa', 'Castillo', 'rosa@ejemplo.cl', '5° básico', 'B', true, 1],            // a leader who teaches stays a leader
+    [22222, 'Ana', 'Rojas', 'arojas@ejemplo.cl', '7° básico', 'B', true, 1],              // not in SF; answered without consent
+    [22222, 'Carla', 'Núñez', 'carla@ejemplo.cl', '7° básico', 'C', true, 1],             // not in SF, no answer
+    [22222, 'Tomás', 'Díaz', 'tomas@ejemplo.cl', '8° básico', 'A', true, 1],              // answered (email)
+    [22222, 'Pedro', 'Soto', 'pedro@ejemplo.cl', '3° básico', 'A', false, 1],
+  ];
+  const n0 = sheets['Respuestas EFA'].length;
+  const resp = (nombre, apellido, correo, rol, run) => ['EFA_EDI', '2026-11-05T10:00:00', nombre, apellido, correo, FARO, rol, '-', run];
+  sheets['Respuestas EFA'][0] = sheets['Respuestas EFA'][0].concat(['RUN']);
+  sheets['Respuestas EFA'].push(
+    resp('Ana', 'Pérez Soto', 'otra@ejemplo.cl', 'Director/a del establecimiento', '12345678-0'),     // RUT with another check digit
+    resp('Juan', 'Galleogs Martínez', 'jg@otro.cl', 'Soy Mentor/a del programa', ''),               // surname typo, extra surname
+    resp('Tomás', 'Díaz Lagos', 'tomas@ejemplo.cl', 'Soy Docente e implemento el Programa', '22222222-2'),
+    resp('Ana', 'Rojas', 'ar@otro.cl', '-', '33333333-3'),                                          // no consent: still answered
+    resp('Rosa', 'Castillo', 'rc@otro.cl', 'Soy Mentor/a del programa', '99999999-9'));             // same name, RUT says otherwise
+  const reloj = { hoy: '2026-11-05', generado: 'x' };
+  const d = ctx.cargarDatos_();
+  const e = ctx.panel_('22222', d, reloj).programas[0].efa;
+  const p = e.pendientes || {};
+  check('EDI pendientes: leaders from SF (repeated rows once, role label, org-chart order), RUT/name typos and no-consent count as answered',
+    p.total === 4 && JSON.stringify(p.lideres) === JSON.stringify([{ nombre: 'Rosa Castillo Vera', rol: 'Encargado/a y Mentor/a' }, { nombre: 'Felipe Araya', rol: 'Otro/a líder' }]));
+  check('EDI pendientes: teachers only in EDI grades (SDC), by grade with their letters, one teacher in two grades counted once',
+    JSON.stringify(p.docentes) === JSON.stringify([
+      { nivel: '5° básico', personas: [{ nombre: 'Luis Herrera', letras: ['A'] }] },
+      { nivel: '6° básico', personas: [{ nombre: 'Luis Herrera', letras: ['B'] }] },
+      { nivel: '7° básico', personas: [{ nombre: 'Carla Núñez', letras: ['C'] }] }]));
+  check('EDI pendientes: who answered is unchanged (5 responses listed)', e.total === 5);
+  check('no role ("-") → own section «sinrol» last, no label; Líderes no longer holds it; Σ sections = total', (() => {
+    const ids = e.secciones.map(s => s.id), sr = e.secciones[3], li = e.secciones[1];
+    return ids.join() === 'direccion,lideres,docentes,sinrol' && sr.r === 1
+      && JSON.stringify(sr.personas) === JSON.stringify([{ nombre: 'Ana Rojas', rol: null }])
+      && li.personas.every(x => x.nombre !== 'Ana Rojas') && e.secciones.reduce((a, s) => a + s.r, 0) === e.total; })());
+  check('no «sinrol» section when everyone declared a role', ctx.panel_('11111', d, reloj).programas.every(x => x.efa.secciones.every(s => s.id !== 'sinrol')));
+  check('EDI pendientes: no emails or RUTs in the payload', !/@ejemplo|@otro|12345678|11111111/.test(JSON.stringify(e.pendientes)));
+  check('EDI pendientes: only while open or extra week; never for non-EDI programs; no block without Contactos EFA-EDI', (() => {
+    const cerrado = ctx.panel_('22222', d, { hoy: '2026-11-25', generado: 'x' }).programas[0].efa;
+    const extra = ctx.panel_('22222', Object.assign({}, d, { cfg: Object.assign({}, d.cfg, { efa_extension: '20-11-2026' }) }), { hoy: '2026-11-17', generado: 'x' }).programas[0].efa;
+    const aromos = ctx.panel_('11111', d, reloj).programas;
+    const sinTab = ctx.panel_('22222', Object.assign({}, d, { contactosEdi: null }), reloj).programas[0].efa;
+    return !('pendientes' in cerrado) && extra.pendientes.total === 4 && aromos.every(x => !('pendientes' in x.efa)) && !('pendientes' in sinTab); })());
+  check('EDI pendientes: everyone answered → total 0 (the portal thanks them)', (() => {
+    const todos = ctx.pendientesEdi_('22222', { programa: 'ase' }, { contactosEdi: d.contactosEdi.filter(x => x.roles.indexOf('director') >= 0), sdc: [] },
+      d.efa.filter(x => x.rbd === '22222'));
+    return todos.total === 0 && todos.lideres.length === 0 && todos.docentes.length === 0; })());
+  check('RUT matching: same, another check digit, one digit more or less; different people not', ctx.rutParecido_('123456785', '123456780')
+    && ctx.rutParecido_('17445659K', '174456590K') && ctx.rutParecido_('161221244', '1612212444') && !ctx.rutParecido_('123456785', '123456795')
+    && !ctx.rutParecido_('', '') && ctx.rutNorm_('12.345.678-k') === '12345678K' && ctx.rutNorm_('-') === '');
+  check('name words: one typo or swap in long words only', ctx.palabraParecida_('gallegos', 'galleogs') && ctx.palabraParecida_('munoz', 'munos')
+    && !ctx.palabraParecida_('ana', 'ani') && !ctx.palabraParecida_('perez', 'gomez') && !ctx.palabraParecida_('soto', 'sota'));
+  sheets['Respuestas EFA'].length = n0;
+  sheets['Respuestas EFA'][0] = sheets['Respuestas EFA'][0].slice(0, -1);
+  delete sheets['Contactos EFA-EDI']; delete sheets['SDC'];
+}
+
 const pp = ctx.probarPanel(); console.log('--- probarPanel() ---\n' + pp);
 check('probarPanel logs counts, no names or emails', !/Martina|Rojas|@ejemplo/.test(pp) && /RBD 11111/.test(pp));
 check('no clave in logs', !logs.join('\n').match(/aaa111|bbb222|ddd444/));

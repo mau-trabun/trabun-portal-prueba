@@ -212,6 +212,20 @@
     .docentes-lista{padding:0 14px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:24px}
     .docentes-lista .persona{padding:5px 0}
     .efa-nota{font-size:12px;color:var(--muted)}
+    /* EDI «Faltan por responder» (Mau 17-11-2026): pending people first, in a neutral dashed box (no program color,
+       no red), then «Ya respondieron» with what every school sees */
+    .efa-bloque + .efa-bloque{margin-top:22px}
+    .efa-bloque-cab{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-bottom:4px}
+    .efa-bloque-cab h3{font-family:var(--f-head);font-weight:800;font-size:17px;margin:0}
+    .efa-bloque.faltan{border:1.5px dashed #c9ccd3;border-radius:14px;padding:16px 18px}
+    .efa-bloque-nota{font-size:13px;color:var(--muted);margin:0 0 10px}
+    .faltan .seccion{padding-top:12px}
+    .faltan .seccion + .seccion{margin-top:12px}
+    .faltan-nivel{font-family:var(--f-head);font-weight:700;font-size:12.5px;color:var(--muted-2);margin:8px 0 0}
+    .faltan-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:24px}
+    .faltan-lista .persona{padding:5px 0}
+    .faltan-ayuda{border-top:1px solid var(--borde);margin-top:14px;padding-top:10px;font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+    .faltan-listo{font-size:14px;margin:4px 0 0}
     .nota-cursos{margin:2px 14px 12px;background:var(--papel);border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.45;color:var(--muted-2)}
 
     /* ── COMPARTIR (sección siempre visible + QR) ───────── */
@@ -2801,14 +2815,17 @@ window.qrcode=qrcode;
     const normalizar = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
       .replace(/['\u2019`\u00b4]/g, "").replace(/-/g, " ").replace(/\s+/g, " ").trim();
 
-    // Display-only casing fix: ALL CAPS or all lowercase → Title Case, keeping particles (de, del, la…).
-    // Mixed case is left as typed. Accents can't be restored.
+    // Display-only casing fix, word by word (Mau 17-11-2026: "PEDRO Rojas SOTO", "Marta ines Vera"):
+    // a word in ALL CAPS or all lowercase → Title Case (each part after "-" or "'" too); particles (de, del, la…)
+    // after the first word → lowercase. A word typed in mixed case ("McKay", "De") is left as typed. Accents can't be restored.
     const PARTICULAS = new Set(["de", "del", "la", "las", "los", "y", "e", "da", "das", "do", "dos", "di", "van", "von", "der"]);
     function formatNombre(s) {
       const t = String(s || "").replace(/\s+/g, " ").trim();
-      if (!t || (t !== t.toUpperCase() && t !== t.toLowerCase())) return t;
-      return t.toLowerCase().split(" ").map((w, i) => i > 0 && PARTICULAS.has(w) ? w
-        : w.replace(/(^|[-'’])(\p{L})/gu, (m, sep, c) => sep + c.toUpperCase())).join(" ");
+      return t.split(" ").map((w, i) => {
+        if (w !== w.toUpperCase() && w !== w.toLowerCase()) return w;
+        const l = w.toLowerCase();
+        return i > 0 && PARTICULAS.has(l) ? l : l.replace(/(^|[-'’])(\p{L})/gu, (m, sep, c) => sep + c.toUpperCase());
+      }).join(" ");
     }
 
     // "2026-10-13" → { dia: 13, mes: 9 } (no Date objects: avoids time-zone shifts)
@@ -3570,7 +3587,7 @@ window.qrcode=qrcode;
         + seccionCompartir(prog, "efa");
     }
 
-    const SECCIONES_EFA = { direccion: "Dirección", lideres: "Líderes educativos", docentes: "Docentes" };
+    const SECCIONES_EFA = { direccion: "Dirección", lideres: "Líderes educativos", docentes: "Docentes", sinrol: "Sin rol declarado" };
     const vacioEfa = `<div class="seccion-vacia">Aún no hay respuestas.</div>`;
 
     // REL docentes also carry the grades they declared: "Docente · 5° a 8° básico"
@@ -3590,7 +3607,37 @@ window.qrcode=qrcode;
           ${cuerpo}
         </div>`;
       }).join("");
-      return `<div class="secciones">${cols}</div>`;
+      const respondieron = `<div class="secciones">${cols}</div>`;
+      const fase = (estado.datos.encuestas.efa || {}).fase;
+      const pend = prog.efa.pendientes;
+      if (!pend || (fase !== "open" && fase !== "extra")) return respondieron;
+      return `<div class="efa-bloque faltan">${bloqueFaltan(pend)}</div>
+        <div class="efa-bloque"><div class="efa-bloque-cab"><h3>Ya respondieron</h3></div>${respondieron}</div>`;
+    }
+
+    // EDI «Faltan por responder» (Mau 17-11-2026): expected people (SF leaders + teachers of EDI grades in the SdC)
+    // who don't appear among the responses yet. The backend sends names only; who answered stays as every school sees it.
+    function bloqueFaltan(pend) {
+      const cab = `<div class="efa-bloque-cab"><h3>Faltan por responder</h3>${pend.total ? `<span class="seccion-pill">${plural(pend.total, "persona", "personas")}</span>` : ""}</div>`;
+      if (!pend.total) return cab + `<p class="faltan-listo">Ya respondieron todas las personas que esperábamos. ¡Muchas gracias!</p>`;
+      const persona = (nombre, detalle) => {
+        const n = formatNombre(nombre);
+        return `<div class="persona"><b>${n ? esc(n) : "Sin nombre"}</b>${detalle ? `<span>${esc(detalle)}</span>` : ""}</div>`;
+      };
+      const lideres = (pend.lideres || []).length ? `<div class="seccion"><div class="seccion-cab"><b>Líderes</b></div>
+          <div class="faltan-lista">${pend.lideres.map(x => persona(x.nombre, x.rol)).join("")}</div></div>` : "";
+      const docentes = (pend.docentes || []).length ? `<div class="seccion"><div class="seccion-cab"><b>Docentes</b></div>
+          ${pend.docentes.map(g => `<div class="faltan-nivel">${esc(g.nivel)}</div>
+            <div class="faltan-lista">${g.personas.map(x => persona(x.nombre, (x.letras || []).length ? `${g.nivel} ${letrasConY(x.letras)}` : "")).join("")}</div>`).join("")}</div>` : "";
+      const contacto = estado.datos.contacto || "consultas_edi@fundaciontrabun.cl";
+      return cab + `<p class="efa-bloque-nota">Personas que esperamos en la encuesta y que todavía no aparecen entre las respuestas.</p>`
+        + lideres + docentes
+        + `<div class="faltan-ayuda">¿Alguien de esta lista ya respondió? Escríbenos a ${esc(contacto)} y lo revisamos.</div>`;
+    }
+
+    // "A", "A y B", "A, B y C"
+    function letrasConY(xs) {
+      return xs.length < 2 ? (xs[0] || "") : xs.slice(0, -1).join(", ") + " y " + xs[xs.length - 1];
     }
 
     // Course count from SF, only inside the open grade (as in EFS): context, never "1 de 3" (one teacher may cover every class)

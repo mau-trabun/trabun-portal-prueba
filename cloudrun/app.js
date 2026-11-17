@@ -147,6 +147,7 @@ function crearServicio({ src, planilla, seguimiento = null, seguimientoEfa = nul
   const lectura = Object.keys(TABS).filter(k => k !== 'metricas').map(k => TABS[k]);
   const sinFechas = [TABS.respTest]; // the big tab: no date column is read from it
   const columnas = {};
+  columnas[TABS.contactosEdi] = vm.runInContext('COLS_CONTACTOS_EDI', ctx); // EDI «Faltan por responder»: only what it reads
   // The trackers also need portal use and the email date (only RBD + Enviado); the EFA one, SF contacts (Email to spot
   // repeats; Email, then first name + first surname, to match a response to its contact; never written), Ajustes EFA, and for its Destinatarios tab the encargados (first name + email) and correos_jdp
   if (seguimiento || seguimientoEfa) lectura.push(TABS.metricas);

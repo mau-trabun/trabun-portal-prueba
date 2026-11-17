@@ -257,6 +257,33 @@ const sinTiempos = o => { delete o.ms; delete o.generado; return o; };
   delete sheets['Encargados']; delete sheets['correos_jdp'];
   delete sheets['Correos EFA']; delete sheets['Contactos EFA'];
 
+  // EDI «Faltan por responder»: Contactos EFA-EDI read with only its columns (no Account Name or Rol en el colegio),
+  // SDC whole; same payload as Apps Script (extra week until 2099 so the block is on whatever the date)
+  {
+    const FARO = 'Puerto Inventado - Escuela El Faro - 22222';
+    sheets['Contactos EFA-EDI'] = [['Nombre para formulario', 'Account Name', 'Implementación: Record Type', 'First Name', 'Last Name', 'Rol en la Implementacióon', 'Email', 'Vigente 2026', 'Rol en el colegio', 'RUT'],
+      [FARO, 'Cuenta Secreta', 'ASE', 'Rosa', 'Castillo', 'Mentor/a', 'rosa@ejemplo.invalid', true, '["Secreto"]', '11111111-1'],
+      [FARO, 'Cuenta Secreta', 'ASE', 'Ana', 'Pérez', 'Director/a', 'ana@ejemplo.invalid', true, '[]', '12345678-5']];
+    sheets['SDC'] = [['RBD', 'Nombre', 'Apellido', 'Correo', 'Nivel', 'Letra', 'Nivel EDI', 'Cohorte'],
+      [22222, 'Luis', 'Herrera', 'luis@ejemplo.invalid', '5° básico', 'A', true, 1]];
+    sheets['Respuestas EFA'][0].push('RUN');
+    sheets['Respuestas EFA'].push(['EFA_EDI', '2026-11-05T10:00:00', 'Ana', 'Pérez', 'otra@ejemplo.invalid', FARO, 'Director/a del establecimiento', '-', '12345678-0']);
+    const filaExt = ['efa_extension', new Date(2099, 0, 1), ''];
+    sheets['Config'].push(filaExt);
+    const svcEdi = crearServicio({ src, planilla, log: silencio });
+    const b = await JSON.parse((await svcEdi.manejar('POST', '/', JSON.stringify({ rbd: '22222', clave: 'bbb222' }))).cuerpo);
+    delete cacheStore['intentos_22222'];
+    const a = gasPost({ rbd: '22222', clave: 'bbb222' });
+    const snapEdi = svcEdi._estado().snap.tablas['Contactos EFA-EDI'];
+    const pe = b.programas && b.programas[0].efa.pendientes;
+    check('EDI pendientes on Cloud Run: same payload as Apps Script; Contactos EFA-EDI read with only its columns',
+      JSON.stringify(sinTiempos(a)) === JSON.stringify(sinTiempos(b)) && pe && pe.total === 2 && pe.lideres.map(x => x.nombre).join() === 'Rosa Castillo'
+      && pe.docentes[0].personas[0].nombre === 'Luis Herrera' && !JSON.stringify(snapEdi).includes('Secret') && !JSON.stringify(b).includes('@ejemplo'));
+    sheets['Config'].splice(sheets['Config'].indexOf(filaExt), 1);
+    sheets['Respuestas EFA'].pop(); sheets['Respuestas EFA'][0].pop();
+    delete sheets['Contactos EFA-EDI']; delete sheets['SDC'];
+  }
+
   // HTTP layer: CORS by origin, body limit, unknown route
   const srv = crearServidor(svc, ['https://mau-trabun.github.io']).listen(0);
   await new Promise(r => srv.once('listening', r));

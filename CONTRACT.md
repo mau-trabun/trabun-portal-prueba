@@ -80,7 +80,7 @@ Same import pattern as EFS.
 
 | Form | Fecha | Nombre | Apellido | Correo | Colegio | Rol | Niveles |
 
-**2026 import (30-10-2026):** the compiled SurveyMonkey Sheet (ID in memory only) has one tab per survey (9: ASE ×3, EDI Cohorte 1/2, REL ×3, REL Cuadernillos), header in row 1. `Respuestas EFA` A2 holds one `ARRAYFORMULA(LET(… VSTACK(IFERROR(LET(IMPORTRANGE… FILTER … HSTACK…)))))` block per tab (generated from the headers; column positions differ by tab): Form = the `Formularios` label, Fecha = End Date, Nombre = Primer Nombre, Apellido = Primer + Segundo Apellido, Correo, Colegio = the `rbd` custom variable, Rol, Niveles, plus column `RUN` (EDI only, for the ~2-week "X of Y"; not read yet). EDI grades come as a matrix with every row written, "NT1: A, B | NT2: - | 1° básico: A" (`nivelesDeTexto_()` keeps the grade before ":" only when a class follows it; "-" = not declared, fixed 13-11-2026).
+**2026 import (30-10-2026):** the compiled SurveyMonkey Sheet (ID in memory only) has one tab per survey (9: ASE ×3, EDI Cohorte 1/2, REL ×3, REL Cuadernillos), header in row 1. `Respuestas EFA` A2 holds one `ARRAYFORMULA(LET(… VSTACK(IFERROR(LET(IMPORTRANGE… FILTER … HSTACK…)))))` block per tab (generated from the headers; column positions differ by tab): Form = the `Formularios` label, Fecha = End Date, Nombre = Primer Nombre, Apellido = Primer + Segundo Apellido, Correo, Colegio = the `rbd` custom variable, Rol, Niveles, plus column `RUN` (EDI only; read by «Faltan por responder» to match a response to its expected person, never sent). EDI grades come as a matrix with every row written, "NT1: A, B | NT2: - | 1° básico: A" (`nivelesDeTexto_()` keeps the grade before ":" only when a class follows it; "-" = not declared, fixed 13-11-2026).
 |---|---|---|---|---|---|---|---|
 
 - `Fecha` is a date cell or ISO text.
@@ -152,6 +152,11 @@ Its own Google Sheet (not a tab of `Seguimiento interno`), shared with the team 
 ### `Letras` (optional, manual; created by `prepararLetras()`; 04-11-2026)
 `RBD | Nivel | Letras | ASE | REL`. A school's real class letters for a grade when they aren't A, B, C… from SF `CxN` (e.g. RBD 5992: I° medio «A, D»). `Letras`: letters separated by commas, spaces, «/» or «y», case-insensitive; `Nivel` as everywhere (sign, case and accents ignored); `ASE` / `REL`: checkboxes (Mau 04-11-2026: explicit for the team), the row applies to each program ticked, nothing ticked = not used. When a row applies, its letters are the grade's registered classes (others seen in responses stay «Curso no registrado») and the per-class estimate is SF `Alumnos` ÷ the number of letters; the grade's estimate and registration stay as SF says. A row that can't be read (unknown grade, no letters, RBD not a number) is skipped and that grade keeps the SF letters; a missing tab or wrong headers = SF letters everywhere; two rows for the same school, grade and program: the lower one wins. `prepararLetras()` (manual) creates the tab with the headers, a note on each, and 300 rows of checkboxes; never touches an existing tab. Read by `leerLetras_()`; the team tracker's `Por curso` follows it and its note names the tab.
 
+### `Contactos EFA-EDI` and `SDC` (optional; EDI «Faltan por responder»; 17-11-2026)
+- `Contactos EFA-EDI`: SF report through the Salesforce connector, contacts vigentes 2026 of treated ASE EDI implementations, same columns as `Contactos EFA` plus `Implementación: Modelo`, `Implementación: EDI`, `Año inicio ASE`, `Vigente 2026`, `Rol en el colegio` and **`RUT`**. Raw, like `SF`. Code.js reads `Nombre para formulario` (RBD), `Implementación: Record Type`, `First Name`, `Last Name`, `Rol en la Implementación…` (prefix), `Email`, `RUT`, `Vigente 2026` (a row explicitly not vigente is skipped); Cloud Run downloads only those (`COLS_CONTACTOS_EDI`).
+- `SDC`: `RBD | Nombre | Apellido | Correo | Nivel | Letra | Nivel EDI | Cohorte`, header typed in row 1 and one formula in A2 that imports the SdC «Compilado» (seguimiento de clases ASE, one row per teacher × class) for the schools with an EDI cohort (`cohorte` 1 or 2 in the SdC). `Nivel EDI` (TRUE/FALSE, from the SdC's `nivel_edi`) says whether that row's grade is an EDI grade; only those rows are read. The formula holds the SdC Sheet ID, so it lives in the Sheet and `data/` (local), never in the repo.
+- Missing `Contactos EFA-EDI` → no block. Missing `SDC` → leaders only. Emails and RUTs never leave the server.
+
 ### `Monitor` (written by `revisarConteos()`, Apps Script time trigger every minute; 04-11-2026)
 Counts only, never names. Rows 1–2: last check time + recipients, how it works. From row 4: `Encuesta | Form | Respuestas ahora | Referencia | Estado`, one row per Form of `Respuestas Test` and `Respuestas EFA` (a row with a Form = one response; both imports already drop rows without a school), a `(pestaña)` row per tab (a `REVISAR` row or a formula error shown in A2) and a `Total`. `Referencia` = highest count confirmed. A Form below its reference, or a tab problem, on **5 checks in a row** (about 5 minutes; shorter blips are IMPORTRANGE reloading, and Cloud Run holds the previous copy meanwhile) sends one email (`[Portal] Bajaron las respuestas: …`, before → after); one more when it recovers. Columns G–K: the last 60 events, newest first. State in script properties (`monitor_estado`, `monitor_historial`), so editing the tab changes nothing. `reiniciarMonitor()` (manual) accepts the current counts, e.g. after deleting test responses. The trigger is created by hand in the editor (Activadores → `revisarConteos` → basado en tiempo → cada minuto) by whoever should send the emails; Cloud Run never reads this tab.
 
@@ -196,10 +201,15 @@ Counts only, never names. Rows 1–2: last check time + recipients, how it works
   - Grade `r` = people in that grade.
   - Program `total` = responses after dedup. A person with two roles answered twice and counts twice; a docente with several grades counts once; a "Cumplo todos los roles" response is listed in Líderes and Docentes and counts once (so Σ section `r` can exceed `total`).
 - **EFA sections:**
-  - Role → section(s) + short label (29-10-2026, `ROLES_EFA`), by how the option starts (case, accents and a leading "Soy" ignored): `Director/a…` and `Equipo Directivo / Convivencia Escolar` (EDI) → Dirección; `Encargado/a…`, `Mentor/a…`, `Cumplo ambos roles…` (Encargado/a y Mentor/a), `Otro/a líder…` → Líderes educativos; `Docente…` / `Soy Docente…` (EDI) → Docentes; `Cumplo todos los roles…` (REL) → Líderes **and** Docentes. Labels: Director/a, Equipo Directivo / Convivencia Escolar, Encargado/a, Mentor/a, Encargado/a y Mentor/a, Encargado/a, Mentor/a y Docente, Otro/a líder, Docente. An option not in the list → Líderes, labeled with its text before the first comma.
+  - Role → section(s) + short label (29-10-2026, `ROLES_EFA`), by how the option starts (case, accents and a leading "Soy" ignored): `Director/a…` and `Equipo Directivo / Convivencia Escolar` (EDI) → Dirección; `Encargado/a…`, `Mentor/a…`, `Cumplo ambos roles…` (Encargado/a y Mentor/a), `Otro/a líder…` → Líderes educativos; `Docente…` / `Soy Docente…` (EDI) → Docentes; `Cumplo todos los roles…` (REL) → Líderes **and** Docentes. Labels: Director/a, Equipo Directivo / Convivencia Escolar, Encargado/a, Mentor/a, Encargado/a y Mentor/a, Encargado/a, Mentor/a y Docente, Otro/a líder, Docente. An option not in the list → Líderes, labeled with its text before the first comma. **No role** (`-`, SurveyMonkey's blank: EFA-EDI without consent ends before the role; or empty) → its own section `sinrol` «Sin rol declarado», after Docentes, only when it has people, no label, never says why (Mau 01-11-2026, built 17-11-2026; was Líderes labeled «-»).
   - ASE Docentes are grouped by grade: implemented ∪ declared, NT1–IV. A docente with several grades is listed under each but counted once. A docente with no valid grade goes in a `nivel: null` group.
   - ASE grade `cursos` = SF `CxN` if > 0, else `null` (also `null` for unregistered grades and the `nivel: null` group). Shown only inside the open grade as context ("En este nivel, hay N cursos con el programa."), never as a denominator: one teacher may cover every class.
   - REL Docentes: one flat list.
+- **EDI «Faltan por responder» (Mau 17-11-2026; `pendientesEdi_()`):** treated ASE EDI programs (not Control), only in phase `open` or `extra`, when `Contactos EFA-EDI` has the school or `SDC` does.
+  - Expected people: SF contacts with a leader role (Director/a, Encargado/a, Mentor/a, Otro; combinations with Docente included) + teachers of EDI grades in `SDC` (`Nivel EDI` TRUE), joined to their SF contact when there is one. SF docentes outside EDI grades and contacts without a role are not expected. Repeated SF rows of one person (same RUT or email) are one person; a leader who also teaches stays a leader.
+  - A person counts as answered when any EFA response of that school-program (any role, with or without consent) matches by RUT (`RUN` column; equal, another check digit, or one digit more or less), by email, or by name: a given name and a surname in common (words of 3+ letters; in words of 5+ letters one letter changed, added, dropped or two neighbours swapped), only when exactly one person fits and their RUTs don't contradict it.
+  - Who answered stays exactly as before («Ya respondieron»); a respondent outside the list is never flagged.
+  - Leader label from SF: Director/a; Encargado/a y Mentor/a; Encargado/a; Mentor/a; Otro/a líder. Order as `ORDEN_ROLES`, then surname. Teachers by EDI grade (canonical order), each with their letters from `SDC`; a teacher in two grades is listed in both and counted once.
 - **Phases:** computed on the server in `America/Santiago`.
   - `pre` before the `abre` date, `open` through the end of the `cierra` day; then `extra` through the end of the `extension` day when `Config` has one, `closed` after that (or right after `cierra` without one).
   - `diasRestantes` = calendar days to `cierra` (`open`) or to `extension` (`extra`); `null` otherwise. `extension` (ISO) is in the object only when set.
@@ -270,8 +280,14 @@ Counts only, never names. Rows 1–2: last check time + recipients, how it works
         { "id": "direccion", "r": 2, "personas": [{ "nombre": "María José Fuentes", "rol": "Director/a" }] },
         { "id": "lideres",   "r": 4, "personas": [] },
         { "id": "docentes",  "r": 8,
-          "niveles": [{ "nivel": "6° básico", "registrado": true, "cursos": 3, "r": 2, "personas": [] }] }
-      ]
+          "niveles": [{ "nivel": "6° básico", "registrado": true, "cursos": 3, "r": 2, "personas": [] }] },
+        { "id": "sinrol",    "r": 1, "personas": [{ "nombre": "Ana Rojas", "rol": null }] }  // only when someone answered without a role
+      ],
+      "pendientes": {               // EDI treated programs only, phase open/extra, when the lists have the school
+        "total": 3,                 // people (a teacher in two grades counts once)
+        "lideres": [{ "nombre": "Rosa Castillo Vera", "rol": "Encargado/a y Mentor/a" }],
+        "docentes": [{ "nivel": "5° básico", "personas": [{ "nombre": "Luis Herrera", "letras": ["A"] }] }]
+      }
     }
   }]
 }
@@ -305,6 +321,8 @@ Every rule that treats some schools, programs or roles differently from the gene
 | Test submissions | `normRbd_()` | RBD 0 is rejected, so test responses with RBD 0 never show. | Mau 30-10-2026 |
 | Empty tabs hidden | `testVacio()`, `tieneEfa()` (frontend) | Test tab hidden when no program of the school has Test and the card has EFA; EFA tab hidden until it has a link or a response. | Mau 29-10 / 06-10-2026 |
 | Response-drop guard | `protegerRespuestas()` (`cloudrun/app.js`) | A school whose responses drop in a new snapshot keeps its previous ones for up to 30 min / 3 reads. | Mau 04-11-2026 |
+| EFA «Sin rol declarado» | `rolEfa_()`, `bloqueEfa_()`, `SECCIONES_EFA` (frontend) | A response whose role is `-` or empty (EFA-EDI without consent) is listed in its own last section «Sin rol declarado», not in Líderes; the section exists only when it has people. | Mau 01-11-2026 (built 17-11-2026) |
+| EDI «Faltan por responder» | `pendientesEdi_()`, `bloqueFaltan()` (frontend) | Treated ASE EDI programs only, while the EFA is open or in its extra week: block above «Ya respondieron» with SF leaders + SdC teachers of EDI grades who don't appear among the responses (§3). Regular programs, REL and EDI controls never get it. | Mau 17-11-2026 |
 
 ### Announcement emails
 | Exception | Where | Effect | Decided |

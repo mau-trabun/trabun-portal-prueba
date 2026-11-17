@@ -15,6 +15,8 @@ const TABS = {
   respEfa: 'Respuestas EFA',
   sinTest: 'Sin Test',
   letras: 'Letras',
+  contactosEdi: 'Contactos EFA-EDI', // EDI «Faltan por responder» (Mau 17-11-2026); optional
+  sdc: 'SDC',                        // idem: teachers by grade and class from the seguimiento de clases; optional
 };
 
 const TZ = 'America/Santiago';
@@ -117,6 +119,8 @@ function cargarDatos_() {
     efa: intentar_(TABS.respEfa, () => leerRespuestasEfa_(formularios), null),
     habilitados: intentar_(TABS.sinTest, leerHabilitados_, {}),
     letras: intentar_(TABS.letras, leerLetras_, {}),
+    contactosEdi: intentar_(TABS.contactosEdi, leerContactosEdi_, null), // null = no «Faltan por responder» block
+    sdc: intentar_(TABS.sdc, leerSdc_, null),
   };
 }
 
@@ -331,12 +335,14 @@ function leerRespuestasEfa_(formularios) {
     colegio: colsPrefijo_(t, 'Colegio', true),
     rol: colsPrefijo_(t, 'Rol', true),
     niveles: colsPrefijo_(t, 'Niveles'),
+    run: colsPrefijo_(t, 'RUN'), // EDI surveys only: matches a response to its expected person (never leaves the server)
   };
   return t.rows
     .map((r, i) => {
       const rol = limpio_(primero_(r, c.rol));
       return {
         fila: i + 2,
+        run: rutNorm_(primero_(r, c.run)),
         rbd: rbdDeColegio_(primero_(r, c.colegio)),
         programa: programaDe(primero_(r, c.form)),
         fecha: ms_(primero_(r, c.fecha)),
@@ -384,6 +390,10 @@ function panel_(rbd, d, reloj) {
   const cfg = d.cfg || {};
   const ase = col.programas.ase;
   const studentId = normTexto_(cfg.student_id) === 'numero' ? 'numero' : 'nombre';
+  const encuestas = {
+    test: ventana_(cfg.test_abre, cfg.test_cierra, reloj.hoy, cfg.test_extension),
+    efa: ventana_(cfg.efa_abre, cfg.efa_cierra, reloj.hoy, cfg.efa_extension),
+  };
   return {
     ok: true,
     v: API_VERSION,
@@ -392,16 +402,13 @@ function panel_(rbd, d, reloj) {
     contacto: String((ase && ase.edi ? cfg.contacto_edi : cfg.contacto_general) || CONTACTO_DEFECTO).trim(),
     aviso: String(cfg.aviso_portal == null ? '' : cfg.aviso_portal).trim(), // Config notice for every school ('' = none)
     studentId,
-    encuestas: {
-      test: ventana_(cfg.test_abre, cfg.test_cierra, reloj.hoy, cfg.test_extension),
-      efa: ventana_(cfg.efa_abre, cfg.efa_cierra, reloj.hoy, cfg.efa_extension),
-    },
+    encuestas,
     programas: ['ase', 'rel'].filter(p => col.programas[p])
-      .map(p => panelPrograma_(rbd, col.programas[p], d, studentId)),
+      .map(p => panelPrograma_(rbd, col.programas[p], d, studentId, encuestas.efa.fase)),
   };
 }
 
-function panelPrograma_(rbd, p, d, studentId) {
+function panelPrograma_(rbd, p, d, studentId, faseEfa) {
   const formsTest = formulariosDe_(d.formularios, 'test', p);
   const testIdx = [];
   formsTest.forEach(f => rango_(f).forEach(i => { if (testIdx.indexOf(i) < 0) testIdx.push(i); }));
@@ -420,7 +427,13 @@ function panelPrograma_(rbd, p, d, studentId) {
   if (d.efa) {
     // Control programs never get EFA (Mau 30-10-2026): a response sent by mistake is not shown either, so the tab never appears
     const control = normTexto_(p.modelo) === 'control';
-    Object.assign(efa, bloqueEfa_(p, control ? [] : d.efa.filter(x => x.rbd === rbd && x.programa === p.programa)));
+    const resps = control ? [] : d.efa.filter(x => x.rbd === rbd && x.programa === p.programa);
+    Object.assign(efa, bloqueEfa_(p, resps));
+    // EDI «Faltan por responder» (Mau 17-11-2026): treated EDI programs, only while the EFA is open or in its extra week
+    if (!control && p.edi && p.programa === 'ase' && (faseEfa === 'open' || faseEfa === 'extra')) {
+      const pend = pendientesEdi_(rbd, p, d, resps);
+      if (pend) efa.pendientes = pend;
+    }
   }
   return {
     programa: p.programa,
@@ -576,7 +589,8 @@ function bloqueEfa_(p, resps) {
   const persona = x => ({ nombre: x.nombre, rol: x.rolCorto });
   const ordenadas = id => (porSeccion[id] || []).slice().sort((a, b) => rangoRol_(id, a.rolCorto) - rangoRol_(id, b.rolCorto) || porApellido_(a, b));
 
-  const secciones = SECCIONES.map(id => {
+  // «Sin rol declarado» goes last and only when someone answered without a role
+  const secciones = SECCIONES.concat(porSeccion.sinrol ? ['sinrol'] : []).map(id => {
     const s = { id, r: (porSeccion[id] || []).length };
     if (id === 'docentes' && p.programa === 'ase') s.niveles = nivelesDocentes_(p, ordenadas(id), persona);
     // REL docentes: flat list, so each person carries the grades they declared (canonical order)
@@ -643,11 +657,166 @@ function rangoRol_(seccion, corto) {
 }
 
 function rolEfa_(rol) {
+  // No role: SurveyMonkey writes "-" (EFA-EDI without consent ends before the role question) or leaves it blank.
+  // Own section «Sin rol declarado», only when it has people; never says why (Mau 01-11-2026)
+  if (/^[\s\-–—]*$/.test(rol || '')) return { secciones: ['sinrol'], corto: null };
   const n = normTexto_(rol).replace(/^soy /, '');
   const r = ROLES_EFA.find(x => n.startsWith(x[0]));
   if (r) return { secciones: r[1], corto: r[2] };
   // An option not in the list (a survey edited later): Líderes, its text up to the first comma
   return { secciones: ['lideres'], corto: rol ? rol.split(',')[0].trim() : null };
+}
+
+// ── EDI: «Faltan por responder» (Mau 17-11-2026) ────────────
+// Treated EDI programs see, above who answered (unchanged), the people expected in the EFA-EDI who don't appear yet:
+// leaders from the SF report `Contactos EFA-EDI` (director, encargado, mentor, otro) and teachers of EDI grades from
+// the `SDC` tab (seguimiento de clases), with or without an SF contact. SF docentes outside EDI grades, and contacts
+// without a role, are not expected. A response (any role, consent or not) counts for a person by RUT (one digit more
+// or less, or another check digit, allowed), email, or name: a given name and a surname in common (one typo allowed in
+// long words), only when exactly one person fits and their RUTs don't contradict it. Emails and RUTs never leave the
+// server; the payload carries names, the leader's role and the teacher's EDI grades and letters.
+
+// What leerContactosEdi_ reads (Cloud Run downloads only these columns of the tab)
+const COLS_CONTACTOS_EDI = ['Nombre para formulario', 'Implementación: Record Type', 'First Name', 'Last Name',
+  'Rol en la Implementacióon', 'Rol en la Implementación', 'Email', 'RUT', 'Vigente 2026'];
+function leerContactosEdi_() {
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.contactosEdi)) return null;
+  const t = leerTabla_(TABS.contactosEdi);
+  const c = { nombre: colExacta_(t, 'Nombre para formulario'), tipo: colExacta_(t, 'Implementación: Record Type'),
+    rol: colsPrefijo_(t, 'Rol en la Implementaci', true), correo: colExacta_(t, 'Email'), rut: colExacta_(t, 'RUT'),
+    nombres: colsPrefijo_(t, 'First Name', true), apellidos: colsPrefijo_(t, 'Last Name', true), vigente: t.headers.indexOf('Vigente 2026') };
+  return t.rows
+    .filter(r => !(c.vigente >= 0 && r[c.vigente] !== '' && r[c.vigente] != null && !esVerdadero_(r[c.vigente])))
+    .map(r => ({
+      rbd: rbdDeColegio_(r[c.nombre]),
+      programa: programa_(r[c.tipo]),
+      nombres: limpio_(primero_(r, c.nombres)),
+      apellidos: limpio_(primero_(r, c.apellidos)),
+      roles: rolesContacto_(primero_(r, c.rol)),
+      correo: String(r[c.correo] == null ? '' : r[c.correo]).trim().toLowerCase(),
+      rut: rutNorm_(r[c.rut]),
+    }))
+    .filter(x => x.rbd);
+}
+
+// SDC tab = IMPORTRANGE of the SdC "Compilado" (EDI schools, one row per teacher × class). Only EDI-grade rows are kept.
+const COLS_SDC = ['RBD', 'Nombre', 'Apellido', 'Correo', 'Nivel', 'Letra', 'Nivel EDI'];
+function leerSdc_() {
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.sdc)) return null;
+  const t = leerTabla_(TABS.sdc);
+  const c = {};
+  COLS_SDC.forEach(h => { c[h] = colExacta_(t, h); });
+  return t.rows
+    .map(r => ({
+      rbd: normRbd_(r[c.RBD]),
+      nombres: limpio_(r[c.Nombre]),
+      apellidos: limpio_(r[c.Apellido]),
+      correo: String(r[c.Correo] == null ? '' : r[c.Correo]).trim().toLowerCase(),
+      nivel: nivelIdx_(r[c.Nivel]),
+      letra: letra_(r[c.Letra]),
+      edi: esVerdadero_(r[c['Nivel EDI']]),
+    }))
+    .filter(x => x.rbd && x.edi && x.nivel >= 0 && (x.nombres || x.apellidos));
+}
+
+// "12.345.678-k" / 12345678 / "012345678K" → "12345678K"; '' when too short to be a RUT
+function rutNorm_(v) {
+  const s = String(v == null ? '' : v).replace(/[^0-9kK]/g, '').toUpperCase().replace(/^0+/, '');
+  return s.length >= 7 ? s : '';
+}
+
+// Same RUT, allowing one typo seen in the real data: another check digit, or one digit more or less anywhere
+function rutParecido_(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length === b.length) return a.length >= 8 && a.slice(0, -1) === b.slice(0, -1);
+  const [c, l] = a.length < b.length ? [a, b] : [b, a];
+  if (l.length - c.length !== 1 || c.length < 8) return false;
+  for (let i = 0; i < l.length; i++) if (l.slice(0, i) + l.slice(i + 1) === c) return true;
+  return false;
+}
+
+const PARTICULAS_NOMBRE = ['del', 'las', 'los', 'van', 'von'];
+function palabrasNombre_(v) {
+  return normTexto_(v).replace(/[^a-zñ ]/g, ' ').split(' ').filter(w => w.length >= 3 && PARTICULAS_NOMBRE.indexOf(w) < 0);
+}
+
+// Equal, or (both ≥ 5 letters) one letter changed, added, dropped, or two neighbours swapped ("galleogs" / "gallegos")
+function palabraParecida_(a, b) {
+  if (a === b) return true;
+  if (a.length < 5 || b.length < 5 || Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    const dif = [];
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) dif.push(i);
+    return dif.length === 1 || (dif.length === 2 && dif[1] === dif[0] + 1 && a[dif[0]] === b[dif[1]] && a[dif[1]] === b[dif[0]]);
+  }
+  const [c, l] = a.length < b.length ? [a, b] : [b, a];
+  for (let i = 0; i < l.length; i++) if (l.slice(0, i) + l.slice(i + 1) === c) return true;
+  return false;
+}
+
+const comparten_ = (xs, ys) => xs.some(x => ys.some(y => palabraParecida_(x, y)));
+
+// Pure: one school-program → { total, lideres: [{nombre, rol}], docentes: [{nivel, personas: [{nombre, letras}]}] },
+// or null when neither list has the school (no block shown).
+function pendientesEdi_(rbd, p, d, resps) {
+  if (!d.contactosEdi) return null;
+  const contactos = d.contactosEdi.filter(x => x.rbd === rbd && x.programa === p.programa);
+  const sdc = (d.sdc || []).filter(x => x.rbd === rbd);
+  if (!contactos.length && !sdc.length) return null;
+
+  const personas = [];
+  const nueva = x => {
+    const per = { nombres: x.nombres, apellidos: x.apellidos, dados: palabrasNombre_(x.nombres), apell: palabrasNombre_(x.apellidos),
+      ruts: [], correos: [], roles: [], clases: [], respondio: false };
+    personas.push(per);
+    return per;
+  };
+  const sumar = (per, x) => {
+    if (x.rut && per.ruts.indexOf(x.rut) < 0) per.ruts.push(x.rut);
+    if (x.correo && per.correos.indexOf(x.correo) < 0) per.correos.push(x.correo);
+    (x.roles || []).forEach(r => { if (per.roles.indexOf(r) < 0) per.roles.push(r); });
+    if (x.nivel != null && !per.clases.some(k => k.nivel === x.nivel && k.letra === x.letra)) per.clases.push({ nivel: x.nivel, letra: x.letra });
+  };
+  const porDato = (lista, x) => lista.find(per => (x.rut && per.ruts.some(r => rutParecido_(r, x.rut)))
+    || (x.correo && per.correos.indexOf(x.correo) >= 0));
+  // Name match: a given name and a surname in common; never against a person whose RUT says otherwise; only if unique
+  const porNombre = (lista, x) => {
+    const dados = palabrasNombre_(x.nombres), apell = palabrasNombre_(x.apellidos);
+    if (!dados.length || !apell.length) return null;
+    const c = lista.filter(per => comparten_(dados, per.dados) && comparten_(apell, per.apell)
+      && !(x.rut && per.ruts.length && !per.ruts.some(r => rutParecido_(r, x.rut))));
+    return c.length === 1 ? c[0] : null;
+  };
+  // SF contacts first (repeated rows of one person become one), then the SDC teachers (joined to their contact if any)
+  contactos.forEach(x => sumar(porDato(personas, x) || porNombre(personas, x) || nueva(x), x));
+  sdc.forEach(x => sumar(porDato(personas, x) || porNombre(personas, x) || nueva(x), x));
+
+  const LIDER = ['director', 'encargado', 'mentor', 'otros'];
+  const esLider = per => per.roles.some(r => LIDER.indexOf(r) >= 0);
+  const esperadas = personas.filter(per => esLider(per) || per.clases.length);
+  resps.forEach(x => {
+    const per = porDato(personas, { rut: x.run, correo: x.correo }) || porNombre(personas, { nombres: x.nombres, apellidos: x.apellidos, rut: x.run });
+    if (per) per.respondio = true;
+  });
+
+  const faltan = esperadas.filter(per => !per.respondio);
+  const nombre = per => limpio_([per.nombres, per.apellidos].join(' '));
+  const etiqueta = per => (per.roles.indexOf('director') >= 0 ? 'Director/a'
+    : per.roles.indexOf('encargado') >= 0 && per.roles.indexOf('mentor') >= 0 ? 'Encargado/a y Mentor/a'
+      : per.roles.indexOf('encargado') >= 0 ? 'Encargado/a' : per.roles.indexOf('mentor') >= 0 ? 'Mentor/a' : 'Otro/a líder');
+  const lideres = faltan.filter(esLider)
+    .sort((a, b) => rangoRol_('lideres', etiqueta(a)) - rangoRol_('lideres', etiqueta(b)) || porApellido_(a, b))
+    .map(per => ({ nombre: nombre(per), rol: etiqueta(per) }));
+  const docentesPer = faltan.filter(per => !esLider(per));
+  const niveles = [];
+  docentesPer.forEach(per => per.clases.forEach(k => { if (niveles.indexOf(k.nivel) < 0) niveles.push(k.nivel); }));
+  const docentes = niveles.sort((a, b) => a - b).map(i => ({
+    nivel: NIVELES[i],
+    personas: docentesPer.filter(per => per.clases.some(k => k.nivel === i)).sort(porApellido_)
+      .map(per => ({ nombre: nombre(per), letras: per.clases.filter(k => k.nivel === i && k.letra).map(k => k.letra).sort() })),
+  }));
+  return { total: faltan.length, lideres, docentes };
 }
 
 // Optional extra week (Config `<encuesta>_extension`, Mau 12-11-2026): the closing date stays what schools were told
