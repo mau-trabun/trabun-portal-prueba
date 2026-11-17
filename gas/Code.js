@@ -589,8 +589,9 @@ function bloqueEfa_(p, resps) {
   const persona = x => ({ nombre: x.nombre, rol: x.rolCorto });
   const ordenadas = id => (porSeccion[id] || []).slice().sort((a, b) => rangoRol_(id, a.rolCorto) - rangoRol_(id, b.rolCorto) || porApellido_(a, b));
 
-  // «Sin rol declarado» goes last and only when someone answered without a role
-  const secciones = SECCIONES.concat(porSeccion.sinrol ? ['sinrol'] : []).map(id => {
+  // «Sin rol declarado» between Líderes and Docentes (Mau 17-11-2026), only when someone answered without a role
+  const ids = porSeccion.sinrol ? ['direccion', 'lideres', 'sinrol', 'docentes'] : SECCIONES;
+  const secciones = ids.map(id => {
     const s = { id, r: (porSeccion[id] || []).length };
     if (id === 'docentes' && p.programa === 'ase') s.niveles = nivelesDocentes_(p, ordenadas(id), persona);
     // REL docentes: flat list, so each person carries the grades they declared (canonical order)

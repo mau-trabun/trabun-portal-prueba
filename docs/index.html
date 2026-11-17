@@ -212,6 +212,7 @@
     .docentes-lista{padding:0 14px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:24px}
     .docentes-lista .persona{padding:5px 0}
     .efa-nota{font-size:12px;color:var(--muted)}
+    .sinrol-nota{font-size:13px;margin:0 0 4px}
     /* EDI «Faltan por responder» (Mau 17-11-2026): pending people first, in a soft tray box (no red; program color only
        on the class-letter badges), then «Ya respondieron» with what every school sees */
     .efa-bloque + .efa-bloque{margin-top:22px}
@@ -3616,6 +3617,8 @@ window.qrcode=qrcode;
         let cuerpo;
         if (s.niveles) cuerpo = acordeonDocentes(prog, s); // ASE: by grade
         else cuerpo = (s.personas || []).map(filaPersona).join(""); // REL docentes: flat list (intentional). Empty: the pill says it
+        // No role (EFA-EDI without consent): never say why, only that the answer counts (Mau 17-11-2026)
+        if (s.id === "sinrol") cuerpo = `<p class="efa-nota sinrol-nota">Ya respondieron la encuesta y sus respuestas quedaron registradas. No es necesario que vuelvan a responderla.</p>` + cuerpo;
         return `<div class="seccion">
           <div class="seccion-cab"><b>${SECCIONES_EFA[s.id] || esc(s.id)}</b><span class="seccion-pill${s.r ? "" : " cero"}"><span class="punto"></span>${s.r ? plural(s.r, "respuesta", "respuestas") : "Sin respuestas aún"}</span></div>
           ${cuerpo}

@@ -351,9 +351,9 @@ delete cacheStore['intentos_11111_interno'];
       { nivel: '6° básico', personas: [{ nombre: 'Luis Herrera', letras: ['B'] }] },
       { nivel: '7° básico', personas: [{ nombre: 'Carla Núñez', letras: ['C'] }] }]));
   check('EDI pendientes: who answered is unchanged (5 responses listed)', e.total === 5);
-  check('no role ("-") → own section «sinrol» last, no label; Líderes no longer holds it; Σ sections = total', (() => {
-    const ids = e.secciones.map(s => s.id), sr = e.secciones[3], li = e.secciones[1];
-    return ids.join() === 'direccion,lideres,docentes,sinrol' && sr.r === 1
+  check('no role ("-") → own section «sinrol» before Docentes, no label; Líderes no longer holds it; Σ sections = total', (() => {
+    const ids = e.secciones.map(s => s.id), sr = e.secciones[2], li = e.secciones[1];
+    return ids.join() === 'direccion,lideres,sinrol,docentes' && sr.r === 1
       && JSON.stringify(sr.personas) === JSON.stringify([{ nombre: 'Ana Rojas', rol: null }])
       && li.personas.every(x => x.nombre !== 'Ana Rojas') && e.secciones.reduce((a, s) => a + s.r, 0) === e.total; })());
   check('no «sinrol» section when everyone declared a role', ctx.panel_('11111', d, reloj).programas.every(x => x.efa.secciones.every(s => s.id !== 'sinrol')));

@@ -201,7 +201,7 @@ Counts only, never names. Rows 1–2: last check time + recipients, how it works
   - Grade `r` = people in that grade.
   - Program `total` = responses after dedup. A person with two roles answered twice and counts twice; a docente with several grades counts once; a "Cumplo todos los roles" response is listed in Líderes and Docentes and counts once (so Σ section `r` can exceed `total`).
 - **EFA sections:**
-  - Role → section(s) + short label (29-10-2026, `ROLES_EFA`), by how the option starts (case, accents and a leading "Soy" ignored): `Director/a…` and `Equipo Directivo / Convivencia Escolar` (EDI) → Dirección; `Encargado/a…`, `Mentor/a…`, `Cumplo ambos roles…` (Encargado/a y Mentor/a), `Otro/a líder…` → Líderes educativos; `Docente…` / `Soy Docente…` (EDI) → Docentes; `Cumplo todos los roles…` (REL) → Líderes **and** Docentes. Labels: Director/a, Equipo Directivo / Convivencia Escolar, Encargado/a, Mentor/a, Encargado/a y Mentor/a, Encargado/a, Mentor/a y Docente, Otro/a líder, Docente. An option not in the list → Líderes, labeled with its text before the first comma. **No role** (`-`, SurveyMonkey's blank: EFA-EDI without consent ends before the role; or empty) → its own section `sinrol` «Sin rol declarado», after Docentes, only when it has people, no label, never says why (Mau 01-11-2026, built 17-11-2026; was Líderes labeled «-»).
+  - Role → section(s) + short label (29-10-2026, `ROLES_EFA`), by how the option starts (case, accents and a leading "Soy" ignored): `Director/a…` and `Equipo Directivo / Convivencia Escolar` (EDI) → Dirección; `Encargado/a…`, `Mentor/a…`, `Cumplo ambos roles…` (Encargado/a y Mentor/a), `Otro/a líder…` → Líderes educativos; `Docente…` / `Soy Docente…` (EDI) → Docentes; `Cumplo todos los roles…` (REL) → Líderes **and** Docentes. Labels: Director/a, Equipo Directivo / Convivencia Escolar, Encargado/a, Mentor/a, Encargado/a y Mentor/a, Encargado/a, Mentor/a y Docente, Otro/a líder, Docente. An option not in the list → Líderes, labeled with its text before the first comma. **No role** (`-`, SurveyMonkey's blank: EFA-EDI without consent ends before the role; or empty) → its own section `sinrol` «Sin rol declarado», between Líderes and Docentes (Mau 17-11-2026), only when it has people, no label, never says why; the portal adds a line saying their answer counts and they don't need to answer again (Mau 01-11-2026, built 17-11-2026; was Líderes labeled «-»).
   - ASE Docentes are grouped by grade: implemented ∪ declared, NT1–IV. A docente with several grades is listed under each but counted once. A docente with no valid grade goes in a `nivel: null` group.
   - ASE grade `cursos` = SF `CxN` if > 0, else `null` (also `null` for unregistered grades and the `nivel: null` group). Shown only inside the open grade as context ("En este nivel, hay N cursos con el programa."), never as a denominator: one teacher may cover every class.
   - REL Docentes: one flat list.
@@ -279,9 +279,9 @@ Counts only, never names. Rows 1–2: last check time + recipients, how it works
       "secciones": [
         { "id": "direccion", "r": 2, "personas": [{ "nombre": "María José Fuentes", "rol": "Director/a" }] },
         { "id": "lideres",   "r": 4, "personas": [] },
+        { "id": "sinrol",    "r": 1, "personas": [{ "nombre": "Ana Rojas", "rol": null }] },  // only when someone answered without a role
         { "id": "docentes",  "r": 8,
-          "niveles": [{ "nivel": "6° básico", "registrado": true, "cursos": 3, "r": 2, "personas": [] }] },
-        { "id": "sinrol",    "r": 1, "personas": [{ "nombre": "Ana Rojas", "rol": null }] }  // only when someone answered without a role
+          "niveles": [{ "nivel": "6° básico", "registrado": true, "cursos": 3, "r": 2, "personas": [] }] }
       ],
       "pendientes": {               // EDI treated programs only, phase open/extra, when the lists have the school
         "total": 3,                 // people (a teacher in two grades counts once)
@@ -321,7 +321,7 @@ Every rule that treats some schools, programs or roles differently from the gene
 | Test submissions | `normRbd_()` | RBD 0 is rejected, so test responses with RBD 0 never show. | Mau 30-10-2026 |
 | Empty tabs hidden | `testVacio()`, `tieneEfa()` (frontend) | Test tab hidden when no program of the school has Test and the card has EFA; EFA tab hidden until it has a link or a response. | Mau 29-10 / 06-10-2026 |
 | Response-drop guard | `protegerRespuestas()` (`cloudrun/app.js`) | A school whose responses drop in a new snapshot keeps its previous ones for up to 30 min / 3 reads. | Mau 04-11-2026 |
-| EFA «Sin rol declarado» | `rolEfa_()`, `bloqueEfa_()`, `SECCIONES_EFA` (frontend) | A response whose role is `-` or empty (EFA-EDI without consent) is listed in its own last section «Sin rol declarado», not in Líderes; the section exists only when it has people. | Mau 01-11-2026 (built 17-11-2026) |
+| EFA «Sin rol declarado» | `rolEfa_()`, `bloqueEfa_()`, `SECCIONES_EFA` (frontend) | A response whose role is `-` or empty (EFA-EDI without consent) is listed in its own section «Sin rol declarado» (between Líderes and Docentes), not in Líderes; the section exists only when it has people. | Mau 01-11-2026 (built 17-11-2026) |
 | EDI «Faltan por responder» | `pendientesEdi_()`, `bloqueFaltan()` (frontend) | Treated ASE EDI programs only, while the EFA is open or in its extra week: block above «Ya respondieron» with SF leaders + SdC teachers of EDI grades who don't appear among the responses (§3). Regular programs, REL and EDI controls never get it. | Mau 17-11-2026 |
 
 ### Announcement emails
